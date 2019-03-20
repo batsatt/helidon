@@ -16,7 +16,6 @@
 package io.helidon.media.jsonb.common;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Objects;
@@ -28,8 +27,11 @@ import javax.json.bind.JsonbException;
 import io.helidon.common.http.DataChunk;
 import io.helidon.common.http.Reader;
 import io.helidon.common.reactive.Flow;
+import io.helidon.media.common.CharBuffer;
 import io.helidon.media.common.ContentReaders;
 import io.helidon.media.common.ContentWriters;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
  * Contains utility methods for working with JSON-B.
@@ -77,11 +79,10 @@ public final class JsonBinding {
     public static Function<Object, Flow.Publisher<DataChunk>> writer(final Jsonb jsonb) {
         Objects.requireNonNull(jsonb);
         return payload -> {
-            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            jsonb.toJson(payload, baos);
-            return ContentWriters.byteArrayWriter(false)
-                .apply(baos.toByteArray());
+            CharBuffer buffer = new CharBuffer();
+            jsonb.toJson(payload, buffer);
+            // TODO: charset from request?
+            return ContentWriters.charBufferWriter(UTF_8).apply(buffer);
         };
     }
-
 }

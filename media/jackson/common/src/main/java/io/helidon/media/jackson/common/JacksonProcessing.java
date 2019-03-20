@@ -15,7 +15,6 @@
  */
 package io.helidon.media.jackson.common;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Objects;
 import java.util.function.Function;
@@ -24,10 +23,13 @@ import io.helidon.common.http.DataChunk;
 import io.helidon.common.http.MediaType;
 import io.helidon.common.http.Reader;
 import io.helidon.common.reactive.Flow;
+import io.helidon.media.common.CharBuffer;
 import io.helidon.media.common.ContentReaders;
 import io.helidon.media.common.ContentWriters;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
  * Media type support for Jackson.
@@ -99,15 +101,14 @@ public final class JacksonProcessing {
     public static Function<Object, Flow.Publisher<DataChunk>> writer(final ObjectMapper objectMapper) {
         Objects.requireNonNull(objectMapper);
         return payload -> {
-            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            CharBuffer buffer = new CharBuffer();
             try {
-                objectMapper.writeValue(baos, payload);
+                objectMapper.writeValue(buffer, payload);
             } catch (final IOException wrapMe) {
                 throw new JacksonRuntimeException(wrapMe.getMessage(), wrapMe);
             }
-            return ContentWriters.byteArrayWriter(false)
-                .apply(baos.toByteArray());
+            // TODO: charset from request?
+            return ContentWriters.charBufferWriter(UTF_8).apply(buffer);
         };
     }
-
 }
