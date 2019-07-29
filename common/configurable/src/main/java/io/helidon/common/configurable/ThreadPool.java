@@ -685,109 +685,6 @@ public class ThreadPool extends ThreadPoolExecutor {
         }
     }
 
-    // Consider removing this whole mechanism?
-
-    private static class Event implements Comparable<Event> {
-        private static final int MAX_EVENTS = getIntProperty("thread.pool.events", 0);
-        private static final int DELAY_SECONDS = getIntProperty("thread.pool.events.delay", 0);
-        private static final List<Event> EVENTS = new ArrayList<>(MAX_EVENTS);
-        private static final AtomicBoolean STARTED = new AtomicBoolean();
-        private static final AtomicBoolean WRITTEN = new AtomicBoolean();
-        private static final long START_TIME = ManagementFactory.getRuntimeMXBean().getStartTime();
-        private final long time;
-        private final Type type;
-        private final int threads;
-        private final int activeThreads;
-        private final int queueSize;
-        private final int completedTasks;
-
-        enum Type {
-            IDLE,
-            MAX,
-            BELOW,
-            ADD,
-            WAIT,
-            GC
-        }
-
-        private Event(Type type, ThreadPool pool, WorkQueue queue) {
-            this.time = System.currentTimeMillis();
-            this.type = type;
-            this.threads = pool.getPoolSize();
-            this.activeThreads = pool.getActiveThreads();
-            this.queueSize = queue.size();
-            this.completedTasks = pool.getCompletedTasks();
-        }
-
-        @Override
-        public int compareTo(Event o) {
-            return Long.compare(time, o.time);
-        }
-
-        private String toCsv() {
-            final float elapsedMillis = time - START_TIME;
-            final float elapsedSeconds = elapsedMillis / 1000f;
-            return String.format("%.4f,%d,%s,%d,%d,%d\n", elapsedSeconds, completedTasks, type, threads, activeThreads,
-                                 queueSize);
-        }
-
-        private static void add(Type type, ThreadPool pool, WorkQueue queue) {
-            if (shouldAdd()) {
-                if (!STARTED.getAndSet(true)) {
-                    LOGGER.info("Recording up to " + MAX_EVENTS + " thread pool events");
-                    for (GarbageCollectorMXBean bean : ManagementFactory.getGarbageCollectorMXBeans()) {
-                        final NotificationEmitter emitter = (NotificationEmitter) bean;
-                        emitter.addNotificationListener((notification, handback) -> {
-                            if (notification.getType().equals("com.sun.management.gc.notification") && !WRITTEN.get()) {
-                                add(Type.GC, pool, queue);
-                            }
-                        }, null, null);
-                    }
-                    Runtime.getRuntime().addShutdownHook(new Thread(Event::write));
-                }
-                EVENTS.add(new Event(type, pool, queue));
-            }
-        }
-
-        private static boolean shouldAdd() {
-            if (EVENTS.size() < MAX_EVENTS) {
-                if (DELAY_SECONDS == 0) {
-                    return true;
-                } else {
-                    final long elapsedMillis = System.currentTimeMillis() - START_TIME;
-                    return (elapsedMillis / 1000) >= DELAY_SECONDS;
-                }
-            }
-            return false;
-        }
-
-        private static void write() {
-            if (!EVENTS.isEmpty() && !WRITTEN.getAndSet(true)) {
-                final Path file = Paths.get("thread-pool-events.csv").toAbsolutePath();
-                LOGGER.info("Writing thread pool events to " + file);
-                EVENTS.sort(null);
-                try (OutputStream out = Files.newOutputStream(file,
-                                                              StandardOpenOption.CREATE,
-                                                              StandardOpenOption.WRITE,
-                                                              StandardOpenOption.TRUNCATE_EXISTING)) {
-                    out.write("Elapsed Seconds,Completed Tasks,Event,Threads,Active Threads,Queue Size\n".getBytes());
-                    for (Event event : EVENTS) {
-                        out.write(event.toCsv().getBytes());
-                    }
-                    LOGGER.info("Finished writing thread pool events");
-                } catch (Throwable e) {
-                    LOGGER.warning("failed to write thread pool events" + e);
-                }
-            }
-        }
-
-        private static int getIntProperty(String propertyName, int defaultValue) {
-            final String value = System.getProperty(propertyName);
-            return value == null ? defaultValue : Integer.parseInt(value);
-        }
-    }
-
-
     static final class WeightedAverageGrowth implements Predicate<ThreadPool> {
         private static final long TICK_INTERVAL = TimeUnit.SECONDS.toNanos(5);
         private static final double THRESHOLD_PERCENTAGE = 0.95D;
@@ -942,6 +839,108 @@ public class ThreadPool extends ThreadPoolExecutor {
          */
         double getRate(TimeUnit rateUnit) {
             return rate * (double) rateUnit.toNanos(1);
+        }
+    }
+
+    // Consider removing this whole mechanism?
+
+    private static class Event implements Comparable<Event> {
+        private static final int MAX_EVENTS = getIntProperty("thread.pool.events", 0);
+        private static final int DELAY_SECONDS = getIntProperty("thread.pool.events.delay", 0);
+        private static final List<Event> EVENTS = new ArrayList<>(MAX_EVENTS);
+        private static final AtomicBoolean STARTED = new AtomicBoolean();
+        private static final AtomicBoolean WRITTEN = new AtomicBoolean();
+        private static final long START_TIME = ManagementFactory.getRuntimeMXBean().getStartTime();
+        private final long time;
+        private final Type type;
+        private final int threads;
+        private final int activeThreads;
+        private final int queueSize;
+        private final int completedTasks;
+
+        enum Type {
+            IDLE,
+            MAX,
+            BELOW,
+            ADD,
+            WAIT,
+            GC
+        }
+
+        private Event(Type type, ThreadPool pool, WorkQueue queue) {
+            this.time = System.currentTimeMillis();
+            this.type = type;
+            this.threads = pool.getPoolSize();
+            this.activeThreads = pool.getActiveThreads();
+            this.queueSize = queue.size();
+            this.completedTasks = pool.getCompletedTasks();
+        }
+
+        @Override
+        public int compareTo(Event o) {
+            return Long.compare(time, o.time);
+        }
+
+        private String toCsv() {
+            final float elapsedMillis = time - START_TIME;
+            final float elapsedSeconds = elapsedMillis / 1000f;
+            return String.format("%.4f,%d,%s,%d,%d,%d\n", elapsedSeconds, completedTasks, type, threads, activeThreads,
+                                 queueSize);
+        }
+
+        private static void add(Type type, ThreadPool pool, WorkQueue queue) {
+            if (shouldAdd()) {
+                if (!STARTED.getAndSet(true)) {
+                    LOGGER.info("Recording up to " + MAX_EVENTS + " thread pool events");
+                    for (GarbageCollectorMXBean bean : ManagementFactory.getGarbageCollectorMXBeans()) {
+                        final NotificationEmitter emitter = (NotificationEmitter) bean;
+                        emitter.addNotificationListener((notification, handback) -> {
+                            if (notification.getType().equals("com.sun.management.gc.notification") && !WRITTEN.get()) {
+                                add(Type.GC, pool, queue);
+                            }
+                        }, null, null);
+                    }
+                    Runtime.getRuntime().addShutdownHook(new Thread(Event::write));
+                }
+                EVENTS.add(new Event(type, pool, queue));
+            }
+        }
+
+        private static boolean shouldAdd() {
+            if (EVENTS.size() < MAX_EVENTS) {
+                if (DELAY_SECONDS == 0) {
+                    return true;
+                } else {
+                    final long elapsedMillis = System.currentTimeMillis() - START_TIME;
+                    return (elapsedMillis / 1000) >= DELAY_SECONDS;
+                }
+            }
+            return false;
+        }
+
+        private static void write() {
+            if (!EVENTS.isEmpty() && !WRITTEN.getAndSet(true)) {
+                final Path file = Paths.get("thread-pool-events.csv").toAbsolutePath();
+                LOGGER.info("Writing thread pool events to " + file);
+                EVENTS.sort(null);
+                try (OutputStream out = Files.newOutputStream(file,
+                                                              StandardOpenOption.CREATE,
+                                                              StandardOpenOption.WRITE,
+                                                              StandardOpenOption.TRUNCATE_EXISTING)) {
+                    out.write("Elapsed Seconds,Completed Tasks,Event,Threads,Active Threads,Queue Size\n".getBytes());
+                    for (Event event : EVENTS) {
+                        out.write(event.toCsv().getBytes());
+                    }
+                    LOGGER.info("Finished writing thread pool events");
+                } catch (Throwable e) {
+                    LOGGER.warning("failed to write thread pool events" + e);
+                }
+            }
+        }
+
+        private static int getIntProperty(String propertyName, int defaultValue) {
+            final String value = System.getProperty(propertyName);
+            return value == null ? defaultValue : Integer.parseInt(value);
         }
     }
 }
