@@ -25,6 +25,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
@@ -54,6 +56,7 @@ class ThreadPoolTest {
     private static int MAX_WAIT_SECONDS = Integer.parseInt(System.getProperty("thread.pool.test.max.wait", "10"));
     private static String WARMUP_SECONDS = "thread.pool.warmup.seconds";
     private static String WARMUP_TASKS = "thread.pool.warmup.tasks";
+    private static String USE_WEIGHTED_AVERAGE = "thread.pool.weighted.average.growth";
     private final List<Task> tasks = new ArrayList<>();
     private ThreadPool pool;
 
@@ -61,6 +64,7 @@ class ThreadPoolTest {
     void setup() {
         System.setProperty(WARMUP_SECONDS, "0");
         System.setProperty(WARMUP_TASKS, "0");
+        System.setProperty(USE_WEIGHTED_AVERAGE, "false");
     }
 
     @AfterEach
@@ -76,6 +80,7 @@ class ThreadPoolTest {
             pool = null;
             System.getProperties().remove(WARMUP_SECONDS);
             System.getProperties().remove(WARMUP_TASKS);
+            System.getProperties().remove(USE_WEIGHTED_AVERAGE);
         }
     }
 
@@ -477,6 +482,55 @@ class ThreadPoolTest {
             fail("should have failed");
         } catch (IllegalStateException e) {
             assertThat(customPolicy.getRejectionCount(), is(1));
+        }
+    }
+
+    //@Test
+    void testOneMinuteAverage() throws Exception {
+        ThreadPool.EWMA average = ThreadPool.EWMA.oneMinuteEWMA();
+        long oneMinute = System.currentTimeMillis() + (1000 * 60);
+        int totalTasks = 0;
+        int tasksPerSecond = 5;
+        while (System.currentTimeMillis() < oneMinute) {
+            average.update(tasksPerSecond);
+            totalTasks += tasksPerSecond;
+            Thread.sleep(1000);
+        }
+        average.update(1);
+        totalTasks++;
+
+        assertInRange(average.getRate(SECONDS), tasksPerSecond);
+    }
+
+    static class MovingAverage {
+        private final long periodInMs;
+        private final LongAdder counts;
+        private final AtomicLong periodEnd;
+
+        MovingAverage(int periodSeconds) {
+            this.periodInMs = TimeUnit.SECONDS.toMillis(periodSeconds);
+            this.counts = new LongAdder();
+            this.periodEnd = new AtomicLong();
+        }
+
+        void tickIfNecessary() {
+
+        }
+
+    }
+
+    private static void simulateTaskSubmission(ThreadPool.EWMA average, int taskCount) {
+        for (int i = 0; i < taskCount; i++) {
+            average.update(1);
+        }
+    }
+
+    private static void assertInRange(double actual, double expected) {
+        double min = expected * 0.98;
+        double max = expected * 1.02;
+
+        if ((actual < min) || (actual > max)) {
+            fail(String.format("expected %f, but actual value was %f", expected, actual));
         }
     }
 

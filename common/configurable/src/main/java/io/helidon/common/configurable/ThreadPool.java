@@ -62,6 +62,7 @@ public class ThreadPool extends ThreadPoolExecutor {
     private final LongAdder totalActiveThreads;
     private final AtomicInteger completedTasks;
     private final AtomicInteger failedTasks;
+    private final EWMA averageActiveThreads;
     private final int growthThreshold;
     private final int growthRate;
 
@@ -178,6 +179,7 @@ public class ThreadPool extends ThreadPoolExecutor {
         this.failedTasks = new AtomicInteger();
         this.growthRate = growthRate;
         this.rejectionPolicy = rejectionPolicy;
+        this.averageActiveThreads = EWMA.oneMinuteEWMA();
         queue.setPool(this);
         if (LOGGER.isLoggable(Level.FINE)) {
             LOGGER.fine(toString());
@@ -289,6 +291,15 @@ public class ThreadPool extends ThreadPoolExecutor {
     }
 
     /**
+     * Returns the average number of active threads for the last minute.
+     *
+     * @return The one minute average.
+     */
+    public double getOneMinuteAverageActiveThreads() {
+        return averageActiveThreads.getRate(TimeUnit.MINUTES);
+    }
+
+    /**
      * Returns the rejection count.
      *
      * @return The count.
@@ -346,6 +357,7 @@ public class ThreadPool extends ThreadPoolExecutor {
                + String.format(", averageQueueSize=%.2f", getAverageQueueSize())
                + ", peakQueueSize=" + getPeakQueueSize()
                + String.format(", averageActiveThreads=%.2f", getAverageActiveThreads())
+               + String.format(", oneMinuteAverageActiveThreads=%.2f", getOneMinuteAverageActiveThreads())
                + (fixedSize ? "" : ", peakPoolSize=" + getLargestPoolSize())
                + ", currentPoolSize=" + getPoolSize()
                + ", completedTasks=" + getCompletedTasks()
@@ -357,11 +369,19 @@ public class ThreadPool extends ThreadPoolExecutor {
     @Override
     protected void beforeExecute(Thread t, Runnable r) {
         activeThreads.incrementAndGet();
+        averageActiveThreads.update(1);
     }
 
     @Override
     protected void afterExecute(Runnable r, Throwable t) {
         completedTasks.incrementAndGet();
+
+        // Update our moving average
+
+        averageActiveThreads.update(-1);
+
+        // Update our total by the current count
+
         totalActiveThreads.add(activeThreads.getAndDecrement());
     }
 
@@ -445,7 +465,7 @@ public class ThreadPool extends ThreadPoolExecutor {
         if (maxPoolSize == corePoolSize || growthRate == 0) {
             return new WorkQueue(capacity);
         } else {
-            final boolean useAverage = "true".equals(System.getProperty("thread.pool.weighted.average.growth"));
+            final boolean useAverage = !"false".equals(System.getProperty("thread.pool.weighted.average.growth"));
             final Predicate<ThreadPool> growthPolicy = useAverage ? new WeightedAverageGrowth()
                                                                   : new RateLimitGrowth(growthThreshold, growthRate);
             return new DynamicPoolWorkQueue(growthPolicy, capacity, maxPoolSize);
@@ -685,163 +705,6 @@ public class ThreadPool extends ThreadPoolExecutor {
         }
     }
 
-    static final class WeightedAverageGrowth implements Predicate<ThreadPool> {
-        private static final long TICK_INTERVAL = TimeUnit.SECONDS.toNanos(5);
-        private static final double THRESHOLD_PERCENTAGE = 0.95D;
-        private final EWMA averageActiveThreads;
-        private final AtomicLong lastTick;
-
-        WeightedAverageGrowth() {
-            this.averageActiveThreads = EWMA.oneMinuteEWMA();
-            this.lastTick = new AtomicLong(System.nanoTime());
-        }
-
-        @Override
-        public boolean test(ThreadPool pool) {
-
-            // At this point, we know that the pool has no idle threads and that we
-            // have not reached the maximum pool size, so there is room to grow.
-
-            // Move the clock forward if needed
-
-            tickIfNecessary();
-
-            // Update our moving average with the current active thread count
-
-            final int currentActiveThreads = pool.getActiveCount();
-            averageActiveThreads.update(currentActiveThreads);
-
-            // Is the one minute weighted average more than 95% of the current count?
-
-            final double threshold = THRESHOLD_PERCENTAGE * currentActiveThreads;
-            final double average = averageActiveThreads.getRate(TimeUnit.SECONDS);
-            if (average > threshold) {
-
-                // Yes, so grow
-
-                Event.add(Event.Type.ADD, pool, pool.getQueue());
-                return true;
-
-            } else {
-
-                // Nope, so just enqueue
-
-                Event.add(Event.Type.WAIT, pool, pool.getQueue());
-                return false;
-            }
-        }
-
-        private void tickIfNecessary() {
-            final long oldTick = lastTick.get();
-            final long newTick = System.nanoTime();
-            final long age = newTick - oldTick;
-            if (age > TICK_INTERVAL) {
-                final long newIntervalStartTick = newTick - (age % TICK_INTERVAL);
-                if (lastTick.compareAndSet(oldTick, newIntervalStartTick)) {
-                    final long requiredTicks = age / TICK_INTERVAL;
-                    for (long i = 0; i < requiredTicks; i++) {
-                        averageActiveThreads.tick();
-                    }
-                }
-            }
-        }
-    }
-
-    static final class EWMA {
-        private static final int INTERVAL = 5;
-        private static final double SECONDS_PER_MINUTE = 60.0;
-        private static final int ONE_MINUTE = 1;
-        private static final int FIVE_MINUTES = 5;
-        private static final int FIFTEEN_MINUTES = 15;
-        private static final double M1_ALPHA = 1 - exp(-INTERVAL / SECONDS_PER_MINUTE / ONE_MINUTE);
-        private static final double M5_ALPHA = 1 - exp(-INTERVAL / SECONDS_PER_MINUTE / FIVE_MINUTES);
-        private static final double M15_ALPHA = 1 - exp(-INTERVAL / SECONDS_PER_MINUTE / FIFTEEN_MINUTES);
-        private final LongAdder uncounted = new LongAdder();
-        private final double alpha;
-        private final double interval;
-        private volatile boolean initialized = false;
-        private volatile double rate = 0.0;
-
-        /**
-         * Create a new EWMA with a specific smoothing constant.
-         *
-         * @param alpha the smoothing constant
-         * @param interval the expected tick interval
-         * @param intervalUnit the time unit of the tick interval
-         */
-        private EWMA(double alpha, long interval, TimeUnit intervalUnit) {
-            this.interval = intervalUnit.toNanos(interval);
-            this.alpha = alpha;
-        }
-
-        /**
-         * Creates a new EWMA which is equivalent to the UNIX one minute load average and which expects
-         * to be ticked every 5 seconds.
-         *
-         * @return a one-minute EWMA
-         */
-        static EWMA oneMinuteEWMA() {
-            return new EWMA(M1_ALPHA, INTERVAL, TimeUnit.SECONDS);
-        }
-
-        /**
-         * Creates a new EWMA which is equivalent to the UNIX five minute load average and which expects
-         * to be ticked every 5 seconds.
-         *
-         * @return a five-minute EWMA
-         */
-        static EWMA fiveMinuteEWMA() {
-            return new EWMA(M5_ALPHA, INTERVAL, TimeUnit.SECONDS);
-        }
-
-        /**
-         * Creates a new EWMA which is equivalent to the UNIX fifteen minute load average and which
-         * expects to be ticked every 5 seconds.
-         *
-         * @return a fifteen-minute EWMA
-         */
-        static EWMA fifteenMinuteEWMA() {
-            return new EWMA(M15_ALPHA, INTERVAL, TimeUnit.SECONDS);
-        }
-
-        /**
-         * Update the moving average with a new value.
-         *
-         * @param n the new value
-         */
-        void update(long n) {
-            uncounted.add(n);
-        }
-
-        /**
-         * Mark the passage of time and decay the current rate accordingly.
-         */
-        void tick() {
-            final long count = uncounted.sumThenReset();
-            final double instantRate = count / interval;
-            if (initialized) {
-                double currentRate = rate;
-                currentRate += (alpha * (instantRate - currentRate));
-                // we may lose changes that happen at the very same moment as the previous two lines, though better than being
-                // inconsistent
-                rate = currentRate;
-            } else {
-                rate = instantRate;
-                initialized = true;
-            }
-        }
-
-        /**
-         * Returns the rate in the given units of time.
-         *
-         * @param rateUnit the unit of time
-         * @return the rate
-         */
-        double getRate(TimeUnit rateUnit) {
-            return rate * (double) rateUnit.toNanos(1);
-        }
-    }
-
     // Consider removing this whole mechanism?
 
     private static class Event implements Comparable<Event> {
@@ -855,6 +718,7 @@ public class ThreadPool extends ThreadPoolExecutor {
         private final Type type;
         private final int threads;
         private final int activeThreads;
+        private final double averageActiveThreads;
         private final int queueSize;
         private final int completedTasks;
 
@@ -872,6 +736,7 @@ public class ThreadPool extends ThreadPoolExecutor {
             this.type = type;
             this.threads = pool.getPoolSize();
             this.activeThreads = pool.getActiveThreads();
+            this.averageActiveThreads = pool.getOneMinuteAverageActiveThreads();
             this.queueSize = queue.size();
             this.completedTasks = pool.getCompletedTasks();
         }
@@ -884,8 +749,8 @@ public class ThreadPool extends ThreadPoolExecutor {
         private String toCsv() {
             final float elapsedMillis = time - START_TIME;
             final float elapsedSeconds = elapsedMillis / 1000f;
-            return String.format("%.4f,%d,%s,%d,%d,%d\n", elapsedSeconds, completedTasks, type, threads, activeThreads,
-                                 queueSize);
+            return String.format("%.4f,%d,%s,%d,%d,%f,%d\n", elapsedSeconds, completedTasks, type, threads, activeThreads,
+                                 averageActiveThreads, queueSize);
         }
 
         private static void add(Type type, ThreadPool pool, WorkQueue queue) {
@@ -941,6 +806,157 @@ public class ThreadPool extends ThreadPoolExecutor {
         private static int getIntProperty(String propertyName, int defaultValue) {
             final String value = System.getProperty(propertyName);
             return value == null ? defaultValue : Integer.parseInt(value);
+        }
+    }
+
+
+    static final class WeightedAverageGrowth implements Predicate<ThreadPool> {
+        private static final double THRESHOLD_PERCENTAGE = 0.95D;
+
+        WeightedAverageGrowth() {
+        }
+
+        @Override
+        public boolean test(ThreadPool pool) {
+
+            // At this point, we know that the pool has no idle threads and that we
+            // have not reached the maximum pool size, so there is room to grow.
+
+            // Is the one minute weighted average more than 95% of the current count?
+
+            final double threshold = THRESHOLD_PERCENTAGE * pool.getActiveThreads();
+            final double average = pool.getOneMinuteAverageActiveThreads();
+            if (average > threshold) {
+
+                // Yes, so grow
+
+                Event.add(Event.Type.ADD, pool, pool.getQueue());
+                return true;
+
+            } else {
+
+                // Nope, so just enqueue
+
+                Event.add(Event.Type.WAIT, pool, pool.getQueue());
+                return false;
+            }
+        }
+    }
+
+    static final class EWMA {
+        private static final long TICK_INTERVAL = TimeUnit.SECONDS.toNanos(5);
+        private static final int INTERVAL = 5;
+        private static final double SECONDS_PER_MINUTE = 60.0;
+        private static final int ONE_MINUTE = 1;
+        private static final int FIVE_MINUTES = 5;
+        private static final int FIFTEEN_MINUTES = 15;
+        private static final double M1_ALPHA = 1 - exp(-INTERVAL / SECONDS_PER_MINUTE / ONE_MINUTE);
+        private static final double M5_ALPHA = 1 - exp(-INTERVAL / SECONDS_PER_MINUTE / FIVE_MINUTES);
+        private static final double M15_ALPHA = 1 - exp(-INTERVAL / SECONDS_PER_MINUTE / FIFTEEN_MINUTES);
+        private final LongAdder uncounted = new LongAdder();
+        private final AtomicLong lastTick;
+        private final double alpha;
+        private final double interval;
+        private volatile boolean initialized = false;
+        private volatile double rate = 0.0;
+
+        /**
+         * Create a new EWMA with a specific smoothing constant.
+         *
+         * @param alpha the smoothing constant
+         * @param interval the expected tick interval
+         * @param intervalUnit the time unit of the tick interval
+         */
+        private EWMA(double alpha, long interval, TimeUnit intervalUnit) {
+            this.interval = intervalUnit.toNanos(interval);
+            this.alpha = alpha;
+            this.lastTick = new AtomicLong(System.nanoTime());
+        }
+
+        /**
+         * Creates a new EWMA which is equivalent to the UNIX one minute load average and which expects
+         * to be ticked every 5 seconds.
+         *
+         * @return a one-minute EWMA
+         */
+        static EWMA oneMinuteEWMA() {
+            return new EWMA(M1_ALPHA, INTERVAL, TimeUnit.SECONDS);
+        }
+
+        /**
+         * Creates a new EWMA which is equivalent to the UNIX five minute load average and which expects
+         * to be ticked every 5 seconds.
+         *
+         * @return a five-minute EWMA
+         */
+        static EWMA fiveMinuteEWMA() {
+            return new EWMA(M5_ALPHA, INTERVAL, TimeUnit.SECONDS);
+        }
+
+        /**
+         * Creates a new EWMA which is equivalent to the UNIX fifteen minute load average and which
+         * expects to be ticked every 5 seconds.
+         *
+         * @return a fifteen-minute EWMA
+         */
+        static EWMA fifteenMinuteEWMA() {
+            return new EWMA(M15_ALPHA, INTERVAL, TimeUnit.SECONDS);
+        }
+
+        /**
+         * Update the moving average with a new value.
+         *
+         * @param n the new value
+         */
+        void update(long n) {
+            tickIfNecessary();
+            uncounted.add(n);
+        }
+
+        /**
+         * Mark the passage of time if necessary.
+         */
+        private void tickIfNecessary() {
+            final long oldTick = lastTick.get();
+            final long newTick = System.nanoTime();
+            final long age = newTick - oldTick;
+            if (age > TICK_INTERVAL) {
+                final long newIntervalStartTick = newTick - (age % TICK_INTERVAL);
+                if (lastTick.compareAndSet(oldTick, newIntervalStartTick)) {
+                    final long requiredTicks = age / TICK_INTERVAL;
+                    for (long i = 0; i < requiredTicks; i++) {
+                        tick();
+                    }
+                }
+            }
+        }
+
+        /**
+         * Mark the passage of time and decay the current rate accordingly.
+         */
+        private void tick() {
+            final long count = uncounted.sumThenReset();
+            final double instantRate = count / interval;
+            if (initialized) {
+                double currentRate = rate;
+                currentRate += (alpha * (instantRate - currentRate));
+                // we may lose changes that happen at the very same moment as the previous two lines, though better than being
+                // inconsistent
+                rate = currentRate;
+            } else {
+                rate = instantRate;
+                initialized = true;
+            }
+        }
+
+        /**
+         * Returns the rate in the given units of time.
+         *
+         * @param rateUnit the unit of time
+         * @return the rate
+         */
+        double getRate(TimeUnit rateUnit) {
+            return rate * (double) rateUnit.toNanos(1);
         }
     }
 }
