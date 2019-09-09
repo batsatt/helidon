@@ -1,0 +1,52 @@
+<project>
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.helidon.jlink</groupId>
+    <artifactId>helidon-jlink</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <dependencies>
+<!--
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.11.3</version>
+        </dependency>
+-->
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.0</version>
+                <configuration>
+                    <source>11</source>
+                    <target>11</target>
+                    <compileSourceRoots>
+                        <compileSourceRoot>${project.basedir}/src/main/java9</compileSourceRoot>
+                    </compileSourceRoots>
+                    <compilerArgs>
+                        <arg>--add-exports="jdk.jlink/jdk.tools.jlink.plugin=helidon.jlink"</arg>
+                    </compilerArgs>
+                    <fork>true</fork>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <finalName>${artifactId}</finalName>
+                    <archive>
+                        <manifest>
+                            <mainClass>io.helidon.jlink.Main</mainClass>
+                        </manifest>
+                        <manifestEntries>
+                            <Launcher-Agent-Class>io.helidon.jlink.Main</Launcher-Agent-Class>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+
+        </plugins>
+    </build>
+</project>
