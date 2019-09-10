@@ -16,6 +16,10 @@
 
 package io.helidon.jlink.plugins;
 
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+
 import jdk.tools.jlink.plugin.Plugin;
 import jdk.tools.jlink.plugin.ResourcePool;
 import jdk.tools.jlink.plugin.ResourcePoolBuilder;
@@ -23,7 +27,29 @@ import jdk.tools.jlink.plugin.ResourcePoolBuilder;
 /**
  * TODO: Describe
  */
-public class AutomaticModulesPlugin implements Plugin {
+public class HelidonPlugin implements Plugin {
+
+    private static final String NAME = "helidon";
+    private String targetModule;
+    private List<String> modules;
+
+    @Override
+    public String getName() {
+        return NAME;
+    }
+
+    @Override
+    public boolean hasArguments() {
+        return true;
+    }
+
+    @Override
+    public void configure(Map<String, String> config) {
+        targetModule = config.get( NAME );
+        String modulesToIndex = config.get( "for-modules" );
+        this.modules = Arrays.asList(modulesToIndex.split("," ) );
+    }
+
     @Override
     public ResourcePool transform(ResourcePool in, ResourcePoolBuilder out) {
         return null;
