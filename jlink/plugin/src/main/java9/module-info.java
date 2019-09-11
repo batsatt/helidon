@@ -19,5 +19,10 @@ module helidon.jlink {
     requires jdk.jlink;
     requires java.instrument;
 
+    /* This doesn't work since 'provides' are processed before the required add-exports:
 
+        provides jdk.tools.jlink.plugin.Plugin with io.helidon.jlink.plugins.HelidonPlugin;
+
+       Once jlink plugins are officially supported, the Agent won't be required
+     */
 }
