@@ -92,10 +92,10 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
                 jmodsOverridesDir = assertDir(Paths.get(argAt(++i)));
             } else if (arg.equalsIgnoreCase("--jmodsDir")) {
                 jmodsDir = assertDir(Paths.get(argAt(++i)));
-            } else if (arg.equalsIgnoreCase("--appModulePath")) {
-                appModulePath = assertExists(Paths.get(argAt(++i)));
             } else if (arg.equalsIgnoreCase("--imageDir")) {
                 imageDir = assertDir(Paths.get(argAt(++i)));
+            } else if (appModulePath == null) {
+                appModulePath = assertExists(Paths.get(arg));
             } else {
                 throw new IllegalArgumentException("Unknown argument: " + arg);
             }
@@ -107,7 +107,7 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
         addModulePath(jmodsDir);
 
         if (appModulePath == null) {
-            throw new IllegalArgumentException("--appModulePath required");
+            throw new IllegalArgumentException("applicationModulePath required");
         } else {
             final Path libDir = assertDir(appModulePath.getParent().resolve("libs"));
             addModulePath(libDir);

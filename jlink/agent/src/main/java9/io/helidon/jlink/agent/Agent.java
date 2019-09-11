@@ -17,35 +17,25 @@
 package io.helidon.jlink.agent;
 
 import java.lang.instrument.Instrumentation;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static java.util.Collections.emptyMap;
+import static java.util.Collections.emptySet;
+import static java.util.Collections.singleton;
+import static java.util.Collections.singletonList;
+
 /**
- * TODO: Describe
+ * An instrumentation agent that provides a work-around for the fact that jlink does
+ * not yet export the packages required to implement a plugin.
+ * See https://in.relation.to/2017/12/12/exploring-jlink-plugin-api-in-java-9/ for
+ * more details.
  */
 public class Agent {
 
-    // Ref: https://in.relation.to/2017/12/12/exploring-jlink-plugin-api-in-java-9/
-
-    /*
-
-        Invoking this tool via the jlink wrapper (cleaner than using -J-*) and agent jar:
-
-        java -javaagent:path/to/helidon-jlink-agent.jar \
-        --module-path path/to/modules \
-        --module helidon.jlink \
-        --module-path $JAVA_HOME/jmods/:path/to/modules \
-        --add-modules com.example.b \
-        --output path/to/jlink-image \
-        --helidon=com.example.b:for-modules=com.example.a
-
-     */
-
     /**
-     * Agent entry point, required to add custom plugin. Assumes manifest "Premain-Class" entry.
+     * Agent entry point. Assumes manifest "Premain-Class" entry.
      *
      * @param agentArgs Args passed explicitly to agent.
      * @param inst Instrumentation instance.
@@ -53,33 +43,32 @@ public class Agent {
      */
     public static void premain(String agentArgs, Instrumentation inst) throws Exception {
         System.out.println("BEGIN premain");
-        Module jlinkModule = ModuleLayer.boot().findModule("jdk.jlink").orElseThrow();
-        Module helidonModule = ModuleLayer.boot().findModule("helidon.jlink").orElseThrow();
 
-        Map<String, Set<Module>> extraExports = new HashMap<>();
-        extraExports.put("jdk.tools.jlink.plugin", Collections.singleton(helidonModule));
+        // Get jdk and helidon jlink modules
 
-        // Modify jdk.jlink to export its API to the module with our plug-in
+        Module jlinkModule = findModule("jdk.jlink");
+        Module helidonModule = findModule("helidon.jlink");
 
-        inst.redefineModule(
-            jlinkModule, Collections.emptySet(), extraExports, Collections.emptyMap(),
-            Collections.emptySet(), Collections.emptyMap()
-        );
+        // Modify the jdk module to export its plugin package to our module
 
-        Class<?> pluginClass = jlinkModule.getClassLoader()
-                                          .loadClass("jdk.tools.jlink.plugin.Plugin");
-        Class<?> helidonPluginClass = helidonModule.getClassLoader()
-                                                   .loadClass("io.helidon.jlink.plugins.HelidonPlugin");
+        Map<String, Set<Module>> extraExports = Map.of("jdk.tools.jlink.plugin", singleton(helidonModule));
+        inst.redefineModule(jlinkModule, emptySet(), extraExports, emptyMap(), emptySet(), emptyMap());
 
-        Map<Class<?>, List<Class<?>>> extraProvides = new HashMap<>();
-        extraProvides.put(pluginClass, Collections.singletonList(helidonPluginClass));
+        // Modify our module so it provides our plug-in as a service
 
-        // Modify our module so it provides the plug-in as a service
+        Class<?> pluginClass = loadClass(jlinkModule, "jdk.tools.jlink.plugin.Plugin");
+        Class<?> helidonPluginClass = loadClass(helidonModule, "io.helidon.jlink.plugins.HelidonPlugin");
+        Map<Class<?>, List<Class<?>>> extraProvides = Map.of(pluginClass, singletonList(helidonPluginClass));
+        inst.redefineModule(helidonModule, emptySet(), emptyMap(), emptyMap(), emptySet(), extraProvides);
 
-        inst.redefineModule(
-            helidonModule, Collections.emptySet(), Collections.emptyMap(),
-            Collections.emptyMap(), Collections.emptySet(), extraProvides
-        );
         System.out.println("END premain");
+    }
+
+    private static Module findModule(String moduleName) {
+        return ModuleLayer.boot().findModule(moduleName).orElseThrow();
+    }
+
+    private static Class<?> loadClass(Module module, String className) throws Exception {
+        return module.getClassLoader().loadClass(className);
     }
 }

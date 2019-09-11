@@ -1,0 +1,66 @@
+#!/bin/bash
+
+usage() {
+    println
+    println "Build a custom JRE image from an application module."
+    println
+    println "Usage: ${scriptName} [--debug] <applicationModulePath>"
+    println
+    exit 0
+
+}
+
+main() {
+    init "$@"
+    java ${jvmArgs} -javaagent:${agentJar} --module-path ${pluginJar} --module helidon.jlink ${appArgs}
+}
+
+
+init() {
+    readonly scriptName=$(basename "${0}")
+    readonly binDir=$(dirname "${0}")
+    readonly rootDir=$(cd "${binDir}"/..; pwd)
+    readonly agentJar="${rootDir}/agent/target/helidon-jlink-agent.jar"
+    readonly pluginJar="${rootDir}/plugin/target/helidon-jlink.jar"
+    assertExists ${agentJar}
+    assertExists ${pluginJar}
+
+    while (( ${#} > 0 )); do
+        case "${1}" in
+            -h | --help) usage ;;
+            -d | --debug) setDebug ;;
+            *) appendVar appArgs ${1} ;;
+        esac
+        shift
+    done
+}
+
+setDebug() {
+    if [[ ${JAVA_DEBUG} ]]; then
+        appendVar jvmArgs "${JAVA_DEBUG}"
+    else
+        appendVar jvmArgs "-Xdebug -Xnoagent -Djava.compiler=none -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=5005"
+    fi
+}
+
+assertExists() {
+    [[ -e ${1} ]] || fail "${1} does not exist"
+}
+
+appendVar() {
+    local var=${1}
+    local value=${2}
+    local sep=${3:- }
+    export ${var}="${!var:+${!var}${sep}}${value}"
+}
+
+println() {
+    printf "${1}\n" "${@:2}"
+}
+
+fail() {
+    println "${1}"
+    exit 1
+}
+
+main "$@"
