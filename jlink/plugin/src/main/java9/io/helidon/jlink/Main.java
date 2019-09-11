@@ -72,7 +72,7 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
         this.args = args;
         this.jlinkArgs = new ArrayList<>();
         this.jmodsDir = JAVA_HOME_DIR.resolve("jmods");
-        this.imageDir = CURRENT_DIR.toAbsolutePath();
+        this.imageDir = CURRENT_DIR.resolve("hlink-image").toAbsolutePath();
         this.jlink = ToolProvider.findFirst("jlink").orElseThrow();
         parse();
     }
@@ -94,6 +94,9 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
                 jmodsDir = assertDir(Paths.get(argAt(++i)));
             } else if (arg.equalsIgnoreCase("--imageDir")) {
                 imageDir = assertDir(Paths.get(argAt(++i)));
+                if (Files.exists(imageDir)) {
+                    throw new IllegalArgumentException("Output dir " + imageDir + " already exists.");
+                }
             } else if (appModulePath == null) {
                 appModulePath = assertExists(Paths.get(arg));
             } else {
@@ -109,13 +112,28 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
         if (appModulePath == null) {
             throw new IllegalArgumentException("applicationModulePath required");
         } else {
-            final Path libDir = assertDir(appModulePath.getParent().resolve("libs"));
-            addModulePath(libDir);
+            assertDir(appModulePath.getParent().resolve("libs"));
+
+            // Since we expect Helidon and dependencies to leverage automatic modules, we
+            // can't configure jlink with the app and libs directly. It requires some module,
+            // however, so just add this one. We'll filter it out later.
+
+            Class<?> thisClass = getClass();
+            String thisModuleName = thisClass.getModule().getName();
+            Path thisModulePath = getModulePath(thisClass);
+            addModulePath(thisModulePath);
+            addArgument("--add-modules", thisModuleName);
+
+            //      addModulePath(assertDir(appModulePath.getParent().resolve("libs"));
         }
 
         addArgument("--output", imageDir);
 
-        addArgument("--helidon", "yep");
+        addArgument("--helidon", appModulePath);
+    }
+
+    private static Path getModulePath(Class<?> moduleClass) {
+        return Paths.get(moduleClass.getProtectionDomain().getCodeSource().getLocation().getPath());
     }
 
     private void addModulePath(Path path) {
