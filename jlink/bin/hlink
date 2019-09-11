@@ -24,6 +24,7 @@ init() {
     readonly pluginJar="${rootDir}/plugin/target/helidon-jlink.jar"
     assertExists ${agentJar}
     assertExists ${pluginJar}
+    [[ -e hlink-image ]] && rm -rf "hlink-image"
 
     while (( ${#} > 0 )); do
         case "${1}" in
