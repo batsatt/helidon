@@ -22,7 +22,7 @@
     <parent>
         <groupId>io.helidon.examples.grpc</groupId>
         <artifactId>helidon-examples-grpc-project</artifactId>
-        <version>1.2.1-SNAPSHOT</version>
+        <version>1.2.2-SNAPSHOT</version>
     </parent>
     <artifactId>helidon-examples-grpc-metrics</artifactId>
     <name>Helidon gRPC Server Examples Metrics</name>
@@ -56,7 +56,11 @@
             <artifactId>helidon-bundles-config</artifactId>
             <version>${project.version}</version>
         </dependency>
-
+        <dependency>
+            <groupId>io.helidon.metrics</groupId>
+            <artifactId>helidon-metrics2</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>io.helidon.grpc</groupId>
             <artifactId>helidon-grpc-client</artifactId>

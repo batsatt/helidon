@@ -23,12 +23,12 @@
 
     <groupId>io.helidon.examples</groupId>
     <artifactId>helidon-quickstart-se</artifactId>
-    <version>1.2.1-SNAPSHOT</version>
+    <version>1.2.2-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>Helidon Quickstart SE Example</name>
 
     <properties>
-        <helidon.version>1.2.1-SNAPSHOT</helidon.version>
+        <helidon.version>1.2.2-SNAPSHOT</helidon.version>
         <helidon.plugin.version>1.0.10</helidon.plugin.version>
         <mainClass>io.helidon.examples.quickstart.se.Main</mainClass>
         <exec.mainClass>${mainClass}</exec.mainClass>
@@ -39,6 +39,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <argLine>-Dfile.encoding=UTF-8</argLine>
+        <version.lib.microprofile-metrics2-api>2.0.1</version.lib.microprofile-metrics2-api>
     </properties>
 
     <build>
@@ -114,6 +115,7 @@
                             <overWriteIfNewer>true</overWriteIfNewer>
                             <includeScope>runtime</includeScope>
                             <excludeScope>test</excludeScope>
+                            <useBaseVersion>false</useBaseVersion>
                         </configuration>
                     </execution>
                 </executions>
@@ -140,6 +142,11 @@
                 <artifactId>junit-jupiter-engine</artifactId>
                 <version>5.1.0</version>
             </dependency>
+            <dependency>
+                <groupId>org.eclipse.microprofile.metrics</groupId>
+                <artifactId>microprofile-metrics-api</artifactId>
+                <version>${version.lib.microprofile-metrics2-api}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -162,7 +169,11 @@
         </dependency>
         <dependency>
             <groupId>io.helidon.metrics</groupId>
-            <artifactId>helidon-metrics</artifactId>
+            <artifactId>helidon-metrics2</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.microprofile.metrics</groupId>
+            <artifactId>microprofile-metrics-api</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
