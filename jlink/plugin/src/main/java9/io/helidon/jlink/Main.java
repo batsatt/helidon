@@ -116,20 +116,23 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
 
             // Since we expect Helidon and dependencies to leverage automatic modules, we
             // can't configure jlink with the app and libs directly. It requires some module,
-            // however, so just add this one. We'll filter it out later.
+            // however, so just add this one. We won't include it in the output.
 
             Class<?> thisClass = getClass();
             String thisModuleName = thisClass.getModule().getName();
             Path thisModulePath = getModulePath(thisClass);
             addModulePath(thisModulePath);
             addArgument("--add-modules", thisModuleName);
-
-            //      addModulePath(assertDir(appModulePath.getParent().resolve("libs"));
         }
 
         addArgument("--output", imageDir);
 
         addArgument("--helidon", appModulePath);
+
+        addArgument("--no-header-files");
+        addArgument("--no-man-pages");
+        addArgument("--strip-debug"); // TODO: option?
+        addArgument("--compress", "2");
     }
 
     private static Path getModulePath(Class<?> moduleClass) {
@@ -138,6 +141,10 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
 
     private void addModulePath(Path path) {
         addArgument("--module-path", path);
+    }
+
+    private void addArgument(String argument) {
+        jlinkArgs.add(argument);
     }
 
     private void addArgument(String argument, Path path) {

@@ -16,13 +16,26 @@
 
 package io.helidon.jlink.plugins;
 
+import java.io.IOException;
+import java.lang.module.FindException;
+import java.lang.module.ModuleDescriptor;
 import java.lang.module.ModuleFinder;
 import java.lang.module.ModuleReference;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+import jdk.tools.jlink.internal.Archive;
+import jdk.tools.jlink.internal.DirArchive;
+import jdk.tools.jlink.internal.ModularJarArchive;
 import jdk.tools.jlink.plugin.Plugin;
 import jdk.tools.jlink.plugin.ResourcePool;
 import jdk.tools.jlink.plugin.ResourcePoolBuilder;
@@ -33,8 +46,17 @@ import jdk.tools.jlink.plugin.ResourcePoolBuilder;
 public class HelidonPlugin implements Plugin {
     private static final String NAME = "helidon";
 
+    private String appModuleName;
     private Path appModulePath;
     private Path appLibsDir;
+    private ModuleReference appModule;
+    private Collection<ModuleReference> appLibModules;
+
+    /**
+     * Constructor.
+     */
+    public HelidonPlugin() {
+    }
 
     @Override
     public String getName() {
@@ -50,15 +72,119 @@ public class HelidonPlugin implements Plugin {
     public void configure(Map<String, String> config) {
         appModulePath = Paths.get(config.get(NAME));
         appLibsDir = appModulePath.getParent().resolve("libs");
+        appModuleName = getModuleName(appModulePath);
+        appModule = ModuleFinder.of(appModulePath).find(appModuleName).orElseThrow();
+        appLibModules = toModules(appLibsDir);
+        System.out.println("appModuleName: " + appModuleName);
         System.out.println("appModulePath: " + appModulePath);
         System.out.println("   appLibsDir: " + appModulePath);
     }
 
+    private static Collection<ModuleReference> toModules(Path appLibsDir) {
+        final AtomicBoolean error = new AtomicBoolean();
+        final Map<String, ModuleReference> modules = new HashMap<>();
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(appLibsDir)) {
+            for (Path entry : stream) {
+                try {
+                    ModuleFinder.of(entry).findAll().forEach(module -> {
+                        final String moduleName = module.descriptor().name();
+                        final ModuleReference existing = modules.get(moduleName);
+                        if (existing == null) {
+                            modules.put(moduleName, module);
+                        } else {
+                            error.set(true);
+                            final Path currentFile = Paths.get(module.location().orElseThrow().getPath()).getFileName();
+                            final Path existingFile = Paths.get(existing.location().orElseThrow().getPath()).getFileName();
+                            System.out.println("Ignoring duplicate module '" + moduleName + "': " +
+                                               currentFile.getFileName() + " and " + existingFile);
+                        }
+                    });
+                } catch (FindException e) {
+                    error.set(true);
+                    System.out.println(e.getMessage());
+                }
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        if (error.get()) {
+            throw new FindException("errors loading library modules");
+        }
+        return modules.values();
+    }
+
     @Override
     public ResourcePool transform(ResourcePool in, ResourcePoolBuilder out) {
+        final Runtime.Version javaBaseVersion = javaBaseVersion(in);
+        final List<Archive> archives = collectArchives(javaBaseVersion);
+
+/*
+        in.moduleView().modules().forEach(m -> System.out.println("module: " + m.name()));
+
+        module: helidon.jlink
+        module: jdk.jdeps
+        module: jdk.jlink
+        module: java.compiler
+        module: java.instrument
+        module: jdk.internal.opt
+        module: jdk.compiler
+        module: java.base
+
+        out is empty!
+ */
+
         return null;
     }
 
+    private List<Archive> collectArchives(Runtime.Version javaBaseVersion) {
+        final List<Archive> archives = new ArrayList<>();
+        archives.add(toArchive(appModule, javaBaseVersion));
+        appLibModules.forEach(module -> archives.add(toArchive(module, javaBaseVersion)));
+        return archives;
+    }
+
+    private Archive toArchive(ModuleReference reference, Runtime.Version javaBaseVersion) {
+        final ModuleDescriptor descriptor = reference.descriptor();
+        final String moduleName = descriptor.name();
+        final Runtime.Version version = descriptor.version().isPresent() ? toRuntimeVersion(descriptor.version().get())
+                                                                         : javaBaseVersion;
+        final boolean automatic = descriptor.isAutomatic();
+        final Path modulePath = Paths.get(reference.location().orElseThrow().getPath());
+        final String fileName = modulePath.getFileName().toString();
+        if (Files.isDirectory(modulePath)) {
+            return automatic ? new AutomaticDirArchive(modulePath, moduleName)
+                             : new DirArchive(modulePath, moduleName);
+        } else if (fileName.endsWith(".jar")) {
+            return automatic ? new AutomaticJarArchive(moduleName, modulePath, version)
+                             : new ModularJarArchive(moduleName, modulePath, version);
+        } else {
+            throw illegalArg("Unsupported module type: " + modulePath);
+        }
+    }
+
+    static class AutomaticDirArchive extends DirArchive {
+        public AutomaticDirArchive(Path dirPath, String moduleName) {
+            super(dirPath, moduleName);
+        }
+    }
+
+    static class AutomaticJarArchive extends ModularJarArchive {
+        public AutomaticJarArchive(String mn, Path jmod, Runtime.Version version) {
+            super(mn, jmod, version);
+        }
+    }
+
+    private static Runtime.Version javaBaseVersion(ResourcePool in) {
+        return toRuntimeVersion(in.moduleView()
+                                  .findModule("java.base")
+                                  .orElseThrow(() -> illegalState("java.base module not found"))
+                                  .descriptor()
+                                  .version().orElseThrow(() -> illegalState("No version in java.base descriptor")));
+    }
+
+    private static Runtime.Version toRuntimeVersion(ModuleDescriptor.Version version) {
+        return Runtime.Version.parse(version.toString());
+    }
 
     private static String getModuleName(Path modulePath) {
         ModuleFinder finder = ModuleFinder.of(modulePath);
@@ -70,4 +196,11 @@ public class HelidonPlugin implements Plugin {
         }
     }
 
+    private static IllegalArgumentException illegalArg(String message) {
+        return new IllegalArgumentException(message);
+    }
+
+    private static IllegalStateException illegalState(String message) {
+        return new IllegalStateException(message);
+    }
 }

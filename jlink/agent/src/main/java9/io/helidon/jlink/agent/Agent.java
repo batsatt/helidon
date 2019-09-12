@@ -49,9 +49,11 @@ public class Agent {
         Module jlinkModule = findModule("jdk.jlink");
         Module helidonModule = findModule("helidon.jlink");
 
-        // Modify the jdk module to export its plugin package to our module
+        // Modify the jdk module to export its plugin and internal packages to our module
 
-        Map<String, Set<Module>> extraExports = Map.of("jdk.tools.jlink.plugin", singleton(helidonModule));
+        Set<Module> exportTo = singleton(helidonModule);
+        Map<String, Set<Module>> extraExports = Map.of("jdk.tools.jlink.plugin", exportTo,
+                                                       "jdk.tools.jlink.internal", exportTo);
         inst.redefineModule(jlinkModule, emptySet(), extraExports, emptyMap(), emptySet(), emptyMap());
 
         // Modify our module so it provides our plug-in as a service
