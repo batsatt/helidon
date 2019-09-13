@@ -49,8 +49,11 @@ public class HelidonPlugin implements Plugin {
     private String appModuleName;
     private Path appModulePath;
     private Path appLibsDir;
+    private Runtime.Version javaBaseVersion;
     private ModuleReference appModule;
     private Collection<ModuleReference> appLibModules;
+    private Archive appArchive;
+    private List<Archive> allArchives;
 
     /**
      * Constructor.
@@ -80,6 +83,30 @@ public class HelidonPlugin implements Plugin {
         System.out.println("   appLibsDir: " + appModulePath);
     }
 
+    @Override
+    public ResourcePool transform(ResourcePool in, ResourcePoolBuilder out) {
+        javaBaseVersion = javaBaseVersion(in);
+        collectArchives();
+
+
+/*
+        in.moduleView().modules().forEach(m -> System.out.println("module: " + m.name()));
+
+        module: helidon.jlink
+        module: jdk.jdeps
+        module: jdk.jlink
+        module: java.compiler
+        module: java.instrument
+        module: jdk.internal.opt
+        module: jdk.compiler
+        module: java.base
+
+        out is empty!
+ */
+
+        return null;
+    }
+
     private static Collection<ModuleReference> toModules(Path appLibsDir) {
         final AtomicBoolean error = new AtomicBoolean();
         final Map<String, ModuleReference> modules = new HashMap<>();
@@ -107,71 +134,42 @@ public class HelidonPlugin implements Plugin {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        if (error.get()) {
-            throw new FindException("errors loading library modules");
-        }
+
+// TODO       if (error.get()) {
+//            throw new FindException("errors loading library modules");
+//        }
         return modules.values();
     }
 
-    @Override
-    public ResourcePool transform(ResourcePool in, ResourcePoolBuilder out) {
-        final Runtime.Version javaBaseVersion = javaBaseVersion(in);
-        final List<Archive> archives = collectArchives(javaBaseVersion);
-
-/*
-        in.moduleView().modules().forEach(m -> System.out.println("module: " + m.name()));
-
-        module: helidon.jlink
-        module: jdk.jdeps
-        module: jdk.jlink
-        module: java.compiler
-        module: java.instrument
-        module: jdk.internal.opt
-        module: jdk.compiler
-        module: java.base
-
-        out is empty!
- */
-
-        return null;
+    private void collectArchives() {
+        appArchive = toArchive(appModule);
+        allArchives = new ArrayList<>();
+        allArchives.add(appArchive);
+        appLibModules.forEach(module -> allArchives.add(toArchive(module)));
     }
 
-    private List<Archive> collectArchives(Runtime.Version javaBaseVersion) {
-        final List<Archive> archives = new ArrayList<>();
-        archives.add(toArchive(appModule, javaBaseVersion));
-        appLibModules.forEach(module -> archives.add(toArchive(module, javaBaseVersion)));
-        return archives;
-    }
-
-    private Archive toArchive(ModuleReference reference, Runtime.Version javaBaseVersion) {
+    private Archive toArchive(ModuleReference reference) {
         final ModuleDescriptor descriptor = reference.descriptor();
         final String moduleName = descriptor.name();
-        final Runtime.Version version = descriptor.version().isPresent() ? toRuntimeVersion(descriptor.version().get())
-                                                                         : javaBaseVersion;
+        final Runtime.Version version = versionOf(descriptor);
         final boolean automatic = descriptor.isAutomatic();
         final Path modulePath = Paths.get(reference.location().orElseThrow().getPath());
         final String fileName = modulePath.getFileName().toString();
+
+        Archive archive;
         if (Files.isDirectory(modulePath)) {
-            return automatic ? new AutomaticDirArchive(modulePath, moduleName)
-                             : new DirArchive(modulePath, moduleName);
+            archive = new DirArchive(modulePath, moduleName);
         } else if (fileName.endsWith(".jar")) {
-            return automatic ? new AutomaticJarArchive(moduleName, modulePath, version)
-                             : new ModularJarArchive(moduleName, modulePath, version);
+            archive = new ModularJarArchive(moduleName, modulePath, version);
         } else {
             throw illegalArg("Unsupported module type: " + modulePath);
         }
+        return automatic ? new AutomaticArchive(archive, version) : archive;
     }
 
-    static class AutomaticDirArchive extends DirArchive {
-        public AutomaticDirArchive(Path dirPath, String moduleName) {
-            super(dirPath, moduleName);
-        }
-    }
-
-    static class AutomaticJarArchive extends ModularJarArchive {
-        public AutomaticJarArchive(String mn, Path jmod, Runtime.Version version) {
-            super(mn, jmod, version);
-        }
+    private Runtime.Version versionOf(ModuleDescriptor descriptor) {
+        return descriptor.version().isPresent() ? toRuntimeVersion(descriptor.version().get())
+                                                : javaBaseVersion;
     }
 
     private static Runtime.Version javaBaseVersion(ResourcePool in) {
