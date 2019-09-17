@@ -13,16 +13,36 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-module helidon.jlink {
-    exports io.helidon.jlink.plugins;
 
-    requires jdk.jlink;
-    requires java.instrument;
+package io.helidon.jlink.logging;
 
-    /* This doesn't work since 'provides' are processed before the required add-exports:
+/**
+ * A console handler that writes to System.out instead of System.err.
+ */
 
-        provides jdk.tools.jlink.plugin.Plugin with io.helidon.jlink.plugins.HelidonPlugin;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.StreamHandler;
 
-       Once jlink plugins are officially supported, the Agent won't be required
+public class ConsoleHandler extends StreamHandler {
+
+    /**
+     * Constructor.
      */
+    public ConsoleHandler() {
+        setOutputStream(System.out);
+        setLevel(Level.ALL);
+        setFormatter(new SimpleFormatter());
+    }
+
+    @Override
+    public void publish(LogRecord record) {
+        super.publish(record);
+        flush();
+    }
+
+    @Override
+    public void close() {
+        flush();
+    }
 }

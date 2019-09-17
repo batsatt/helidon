@@ -35,10 +35,7 @@
                 <configuration>
                     <source>11</source>
                     <target>11</target>
-                    <compileSourceRoots>
-                        <compileSourceRoot>${project.basedir}/src/main/java9</compileSourceRoot>
-                    </compileSourceRoots>
-                    <compilerArgs>
+                     <compilerArgs>
                         <arg>--add-exports="jdk.jlink/jdk.tools.jlink.plugin=helidon.jlink"</arg>
                         <arg>--add-exports="jdk.jlink/jdk.tools.jlink.internal=helidon.jlink"</arg>
                     </compilerArgs>
