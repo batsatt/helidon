@@ -70,6 +70,8 @@ public class HelidonPlugin implements Plugin {
     private ModuleReference appModule;
     private Collection<ModuleReference> appLibModules;
     private DelegatingArchive appArchive;
+    private List<DelegatingArchive> appArchives;
+    private List<DelegatingArchive> javaArchives;
     private List<DelegatingArchive> allArchives;
     private Set<String> javaDependencies;
 
@@ -111,13 +113,15 @@ public class HelidonPlugin implements Plugin {
         try {
             LOG.info("Collecting application archives");
             collectAppArchives();
-            javaDependencies = allArchives.stream()
+            javaDependencies = appArchives.stream()
                                           .flatMap(a -> a.javaModuleDependencies().stream())
                                           .collect(Collectors.toSet());
             LOG.info("Required Java modules: %s", javaDependencies);
             LOG.info("Collecting required Java archives");
             collectRequiredJavaArchives();
-            LOG.info("Archives: %s", allArchives.stream().map(Archive::moduleName).collect(Collectors.toSet()));
+            appendArchives();
+            LOG.info("Java Archives: %s", javaArchives);
+            LOG.info(" App Archives: %s", appArchives);
 
 /*
         in.moduleView().modules().forEach(m -> System.out.println("module: " + m.name()));
@@ -256,18 +260,25 @@ public class HelidonPlugin implements Plugin {
     }
 
     private void collectAppArchives() {
-        allArchives = new ArrayList<>();
+        appArchives = new ArrayList<>();
         appArchive = toArchive(appModule);
-        allArchives.add(appArchive);
-        appLibModules.forEach(module -> allArchives.add(toArchive(module)));
-        javaModules.values().forEach(module -> allArchives.add(toArchive(module)));
+        appArchives.add(appArchive);
+        appLibModules.forEach(module -> appArchives.add(toArchive(module)));
     }
 
     private void collectRequiredJavaArchives() {
+        javaArchives = new ArrayList<>();
         javaDependencies.forEach(javaModuleName -> {
             final DelegatingArchive javaArchive = toArchive(javaModules.get(javaModuleName));
-            allArchives.add(javaArchive);
+            javaArchives.add(javaArchive);
         });
+    }
+
+    private void appendArchives() {
+        javaArchives.sort(null);
+        appArchives.sort(null);
+        allArchives = new ArrayList<>(javaArchives);
+        allArchives.addAll(appArchives);
     }
 
     private DelegatingArchive toArchive(ModuleReference reference) {
@@ -278,7 +289,7 @@ public class HelidonPlugin implements Plugin {
         final String fileName = modulePath.getFileName().toString();
         final Runtime.Version version = versionOf(descriptor);
 
-        LOG.info("\nProcessing %smodule '%s:%s' at %s", automatic ? "automatic " : "", moduleName, version, modulePath);
+        LOG.info("Processing %smodule '%s:%s' at %s", automatic ? "automatic " : "", moduleName, version, modulePath);
 
         Archive archive;
         if (Files.isDirectory(modulePath)) {
