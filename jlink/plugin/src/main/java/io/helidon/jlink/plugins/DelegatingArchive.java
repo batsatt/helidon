@@ -28,7 +28,7 @@ import jdk.tools.jlink.internal.Archive;
 /**
  * An Archive wrapper base class.
  */
-public abstract class DelegatingArchive implements Archive {
+public abstract class DelegatingArchive implements Archive, Comparable<DelegatingArchive> {
     private static final AtomicReference<Set<String>> JDK_MODULES = new AtomicReference<>();
     private final Archive delegate;
     private final ModuleDescriptor descriptor;
@@ -45,6 +45,22 @@ public abstract class DelegatingArchive implements Archive {
         this.delegate = delegate;
         this.descriptor = descriptor;
         this.javaModuleNames = javaModuleNames; ;
+    }
+
+    @Override
+    public int compareTo(DelegatingArchive o) {
+        if (moduleName().equals("java.base")) {
+            return -1;
+        } else if (o.moduleName().equals("java.base")) {
+            return 1;
+        } else {
+            return moduleName().compareTo(o.moduleName());
+        }
+    }
+
+    @Override
+    public String toString() {
+        return moduleName();
     }
 
     /**
