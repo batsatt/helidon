@@ -53,6 +53,10 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
 
     // TODO: create jandex index if needed
 
+    // TODO: AppCDS ! See https://jdk.java.net/13/release-notes (search for "AppCDS") for
+    //              new -XX:ArchiveClassesAtExit=hello.jsa option; consider modifying server
+    //              so we can start app with this option to record archive.
+
     private static final Path JAVA_HOME_DIR = Paths.get(System.getProperty("java.home"));
     private static final Path CURRENT_DIR = Paths.get(".");
 
@@ -88,19 +92,23 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
     private void parse() {
         for (int i = 0; i < args.length; i++) {
             final String arg = args[i];
-            if (arg.equalsIgnoreCase("--jmodOverridesDir")) {
-                jmodsOverridesDir = assertDir(Paths.get(argAt(++i)));
-            } else if (arg.equalsIgnoreCase("--jmodsDir")) {
-                jmodsDir = assertDir(Paths.get(argAt(++i)));
-            } else if (arg.equalsIgnoreCase("--imageDir")) {
-                imageDir = assertDir(Paths.get(argAt(++i)));
-                if (Files.exists(imageDir)) {
-                    throw new IllegalArgumentException("Output dir " + imageDir + " already exists.");
+            if (arg.startsWith("--")) {
+                if (arg.equalsIgnoreCase("--jmodOverridesDir")) {
+                    jmodsOverridesDir = assertDir(Paths.get(argAt(++i)));
+                } else if (arg.equalsIgnoreCase("--jmodsDir")) {
+                    jmodsDir = assertDir(Paths.get(argAt(++i)));
+                } else if (arg.equalsIgnoreCase("--imageDir")) {
+                    imageDir = assertDir(Paths.get(argAt(++i)));
+                    if (Files.exists(imageDir)) {
+                        throw new IllegalArgumentException("Output dir " + imageDir + " already exists.");
+                    }
+                } else if (arg.equalsIgnoreCase("--verbose")) {
+                    addArgument("--verbose");
+                } else {
+                    throw new IllegalArgumentException("Unknown argument: " + arg);
                 }
             } else if (appModulePath == null) {
                 appModulePath = assertExists(Paths.get(arg));
-            } else {
-                throw new IllegalArgumentException("Unknown argument: " + arg);
             }
         }
 
@@ -129,6 +137,7 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
 
         addArgument("--helidon", appModulePath);
 
+        addArgument("--bind-services");
         addArgument("--no-header-files");
         addArgument("--no-man-pages");
         addArgument("--strip-debug"); // TODO: option?
@@ -166,7 +175,7 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
 
     private static Path assertDir(Path dir) {
         if (Files.isDirectory(dir)) {
-            return dir;
+            return dir.toAbsolutePath();
         } else {
             throw new IllegalArgumentException(dir + " is not a directory");
         }
@@ -174,7 +183,7 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
 
     private static Path assertExists(Path path) {
         if (Files.exists(path)) {
-            return path;
+            return path.toAbsolutePath();
         } else {
             throw new IllegalArgumentException(path + " does not exist");
         }

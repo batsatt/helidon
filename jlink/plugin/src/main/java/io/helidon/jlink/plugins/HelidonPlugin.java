@@ -32,6 +32,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
+
+import io.helidon.jlink.logging.Log;
 
 import jdk.tools.jlink.internal.Archive;
 import jdk.tools.jlink.internal.DirArchive;
@@ -45,6 +48,7 @@ import jdk.tools.jlink.plugin.ResourcePoolBuilder;
  */
 public class HelidonPlugin implements Plugin {
     private static final String NAME = "helidon";
+    private static final Log LOG = Log.getLog(NAME);
 
     private String appModuleName;
     private Path appModulePath;
@@ -52,8 +56,9 @@ public class HelidonPlugin implements Plugin {
     private Runtime.Version javaBaseVersion;
     private ModuleReference appModule;
     private Collection<ModuleReference> appLibModules;
-    private Archive appArchive;
-    private List<Archive> allArchives;
+    private DelegatingArchive appArchive;
+    private List<DelegatingArchive> allArchives;
+    private Set<String> jdkDependencies;
 
     /**
      * Constructor.
@@ -78,16 +83,23 @@ public class HelidonPlugin implements Plugin {
         appModuleName = getModuleName(appModulePath);
         appModule = ModuleFinder.of(appModulePath).find(appModuleName).orElseThrow();
         appLibModules = toModules(appLibsDir);
-        System.out.println("appModuleName: " + appModuleName);
-        System.out.println("appModulePath: " + appModulePath);
-        System.out.println("   appLibsDir: " + appModulePath);
+        LOG.info("appModuleName: %s\n" +
+                 "appModulePath: %s\n" +
+                 "   appLibsDir: %s", appModuleName, appModulePath, appLibsDir);
     }
 
     @Override
     public ResourcePool transform(ResourcePool in, ResourcePoolBuilder out) {
-        javaBaseVersion = javaBaseVersion(in);
-        collectArchives();
-
+        try {
+            javaBaseVersion = javaBaseVersion(in);
+            LOG.info("Collecting archives");
+            collectArchives();
+            LOG.info("Finished collecting archives");
+            jdkDependencies = allArchives.stream()
+                                         .flatMap(a -> a.jdkDependencies().stream())
+                                         .collect(Collectors.toSet());
+            LOG.info("JDK modules: %s", jdkDependencies);
+            LOG.info("App modules: %s", allArchives.stream().map(Archive::moduleName).collect(Collectors.toSet()));
 
 /*
         in.moduleView().modules().forEach(m -> System.out.println("module: " + m.name()));
@@ -104,41 +116,78 @@ public class HelidonPlugin implements Plugin {
         out is empty!
  */
 
-        return null;
+            return null;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw e;
+        }
     }
 
     private static Collection<ModuleReference> toModules(Path appLibsDir) {
         final AtomicBoolean error = new AtomicBoolean();
-        final Map<String, ModuleReference> modules = new HashMap<>();
+        final Map<String, List<ModuleReference>> modules = new HashMap<>();
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(appLibsDir)) {
             for (Path entry : stream) {
                 try {
                     ModuleFinder.of(entry).findAll().forEach(module -> {
                         final String moduleName = module.descriptor().name();
-                        final ModuleReference existing = modules.get(moduleName);
-                        if (existing == null) {
-                            modules.put(moduleName, module);
-                        } else {
-                            error.set(true);
-                            final Path currentFile = Paths.get(module.location().orElseThrow().getPath()).getFileName();
-                            final Path existingFile = Paths.get(existing.location().orElseThrow().getPath()).getFileName();
-                            System.out.println("Ignoring duplicate module '" + moduleName + "': " +
-                                               currentFile.getFileName() + " and " + existingFile);
-                        }
+                        modules.computeIfAbsent(moduleName, k -> new ArrayList<>()).add(module);
                     });
                 } catch (FindException e) {
                     error.set(true);
-                    System.out.println(e.getMessage());
+                    LOG.warn(e.getMessage());
                 }
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
 
-// TODO       if (error.get()) {
-//            throw new FindException("errors loading library modules");
-//        }
-        return modules.values();
+        // Weed out duplicates and return
+
+        return modules.values()
+                      .stream()
+                      .map(HelidonPlugin::select)
+                      .collect(Collectors.toSet());
+    }
+
+    private static ModuleReference select(List<ModuleReference> duplicates) {
+        if (duplicates.isEmpty()) {
+            throw new IllegalStateException();
+        } else if (duplicates.size() == 1) {
+            return duplicates.get(0);
+        } else {
+            List<String> fileNames = duplicates.stream()
+                                               .map(r -> Paths.get(r.location().orElseThrow().getPath()).getFileName().toString())
+                                               .sorted((o1, o2) -> {
+                                                   if (o1.equals(o2)) {
+                                                       return 0;
+                                                   } else if (o1.startsWith("jakarta.") && o2.startsWith("jakarta")) {
+                                                       return o1.contains("-api-") ? 1 : -1;
+                                                   } else if (o1.startsWith("jakarta.")) {
+                                                       return 1;
+                                                   } else if (o1.startsWith("javax.") && o2.startsWith("javax")) {
+                                                       return o1.contains("-api-") ? 1 : -1;
+                                                   } else if (o1.startsWith("javax.")) {
+                                                       return 1;
+                                                   } else {
+                                                       return -1;
+                                                   }
+                                               })
+                                               .collect(Collectors.toList());
+
+            final String selectedFile = fileNames.get(0);
+            final ModuleReference selected = duplicates.stream()
+                                                       .filter(r -> r.location().orElseThrow().getPath().endsWith(selectedFile))
+                                                       .findFirst()
+                                                       .orElseThrow();
+            final List<Path> duplicateFiles = duplicates.stream()
+                                                        .filter(r -> r != selected)
+                                                        .map(r -> Paths.get(r.location().orElseThrow().getPath()).getFileName())
+                                                        .collect(Collectors.toList());
+            LOG.warn("Duplicate '%s' modules: selected %s, ignoring %s", selected.descriptor().name(),
+                     selectedFile, duplicateFiles);
+            return selected;
+        }
     }
 
     private void collectArchives() {
@@ -148,13 +197,15 @@ public class HelidonPlugin implements Plugin {
         appLibModules.forEach(module -> allArchives.add(toArchive(module)));
     }
 
-    private Archive toArchive(ModuleReference reference) {
+    private DelegatingArchive toArchive(ModuleReference reference) {
         final ModuleDescriptor descriptor = reference.descriptor();
         final String moduleName = descriptor.name();
-        final Runtime.Version version = versionOf(descriptor);
         final boolean automatic = descriptor.isAutomatic();
         final Path modulePath = Paths.get(reference.location().orElseThrow().getPath());
         final String fileName = modulePath.getFileName().toString();
+        final Runtime.Version version = versionOf(descriptor);
+
+        LOG.info("\nProcessing %smodule '%s:%s' at %s", automatic ? "automatic " : "", moduleName, version, modulePath);
 
         Archive archive;
         if (Files.isDirectory(modulePath)) {
@@ -164,12 +215,18 @@ public class HelidonPlugin implements Plugin {
         } else {
             throw illegalArg("Unsupported module type: " + modulePath);
         }
-        return automatic ? new AutomaticArchive(archive, version) : archive;
+        return automatic ? new AutomaticArchive(archive, descriptor, version, javaBaseVersion)
+                         : new ModuleArchive(archive, descriptor);
     }
 
     private Runtime.Version versionOf(ModuleDescriptor descriptor) {
-        return descriptor.version().isPresent() ? toRuntimeVersion(descriptor.version().get())
-                                                : javaBaseVersion;
+        try {
+            return descriptor.version().isPresent() ? toRuntimeVersion(descriptor.version().get())
+                                                    : javaBaseVersion;
+        } catch (Exception e) {
+            LOG.debug(e.getMessage());
+            return javaBaseVersion;
+        }
     }
 
     private static Runtime.Version javaBaseVersion(ResourcePool in) {

@@ -20,16 +20,18 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.UncheckedIOException;
-import java.nio.file.Path;
+import java.lang.module.ModuleDescriptor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 import java.util.spi.ToolProvider;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
+
+import io.helidon.jlink.logging.Log;
 
 import jdk.tools.jlink.internal.Archive;
 
@@ -38,54 +40,37 @@ import static jdk.tools.jlink.internal.Archive.Entry.EntryType.CLASS_OR_RESOURCE
 /**
  * An archive representing an automatic module.
  */
-public class AutomaticArchive implements Archive {
+public class AutomaticArchive extends DelegatingArchive {
+    private static final Log LOG = Log.getLog("automatic-archive");
     private static final ToolProvider JDEPS = ToolProvider.findFirst("jdeps").orElseThrow();
-    private final Archive delegate;
     private final Runtime.Version version;
     private final Manifest manifest;
     private final boolean isMultiRelease;
     private final String releaseFeatureVersion;
-    private final List<String> jdkModuleDependencies;
+    private final Set<String> jdkDependencies;
 
     /**
      * Constructor.
      *
      * @param delegate The delegate archive.
+     * @param descriptor The descriptor.
      * @param version The archive version.
+     * @param jdkVersion The JDK version.
      */
-    public AutomaticArchive(Archive delegate, Runtime.Version version) {
-        this.delegate = delegate;
+    public AutomaticArchive(Archive delegate, ModuleDescriptor descriptor, Runtime.Version version, Runtime.Version jdkVersion) {
+        super(delegate, descriptor);
         this.version = version;
         this.manifest = manifest();
         this.isMultiRelease = "true".equalsIgnoreCase(mainAttribute(Attributes.Name.MULTI_RELEASE));
-        this.releaseFeatureVersion = Integer.toString(version.feature());
-        this.jdkModuleDependencies = jdkModuleDependencies();
-        System.out.println(delegate.moduleName() + " -> " + jdkModuleDependencies);
+        this.releaseFeatureVersion = Integer.toString(jdkVersion.feature());
+        LOG.info("   Multi release version: %s", isMultiRelease ? releaseFeatureVersion : "none");
+        this.jdkDependencies = collectJdkDependencies();
+        LOG.info("        JDK dependencies: %s", jdkDependencies);
     }
 
     @Override
-    public String moduleName() {
-        return delegate.moduleName();
-    }
-
-    @Override
-    public Path getPath() {
-        return delegate.getPath();
-    }
-
-    @Override
-    public Stream<Entry> entries() {
-        return delegate.entries();
-    }
-
-    @Override
-    public void open() throws IOException {
-        delegate.open();
-    }
-
-    @Override
-    public void close() throws IOException {
-        delegate.close();
+    public Set<String> jdkDependencies() {
+        return jdkDependencies;
     }
 
     private String mainAttribute(Attributes.Name name) {
@@ -110,11 +95,12 @@ public class AutomaticArchive implements Archive {
                 return null;
             }
         } catch (IOException e) {
+            LOG.warn("Error reading manifest: %s", e.getMessage());
             throw new UncheckedIOException(e);
         }
     }
 
-    private List<String> jdkModuleDependencies() {
+    private Set<String> collectJdkDependencies() {
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
         final List<String> args = new ArrayList<>();
 
@@ -123,16 +109,18 @@ public class AutomaticArchive implements Archive {
             args.add("--multi-release");
             args.add(releaseFeatureVersion);
         }
-        args.add(delegate.getPath().toString());
+        args.add(getPath().toString());
 
         final int result = JDEPS.run(new PrintStream(out), System.err, args.toArray(new String[0]));
         if (result != 0) {
-            throw new RuntimeException("Could not collect dependencies of " + delegate.getPath());
+            throw new RuntimeException("Could not collect dependencies of " + getPath());
         }
 
+        final Set<String> jdkModules = jdkModuleNames();
         return Arrays.stream(out.toString().split("\\n"))
                      .map(String::trim)
                      .filter(s -> !s.isEmpty())
-                     .collect(Collectors.toList());
+                     .filter(jdkModules::contains)
+                     .collect(Collectors.toSet());
     }
 }

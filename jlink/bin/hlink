@@ -4,15 +4,14 @@ usage() {
     println
     println "Build a custom JRE image from an application module."
     println
-    println "Usage: ${scriptName} [--debug] <applicationModulePath>"
+    println "Usage: ${scriptName} [--debug] [--dir] <applicationModulePath>"
     println
     exit 0
-
 }
 
 main() {
     init "$@"
-    java ${jvmArgs} -javaagent:${agentJar} --module-path ${pluginJar} --module helidon.jlink ${appArgs}
+    ${javaHome}/bin/java ${jvmArgs} -javaagent:${agentJar} --module-path ${pluginPath} --module ${pluginModule} ${appArgs}
 }
 
 
@@ -22,14 +21,25 @@ init() {
     readonly rootDir=$(cd "${binDir}"/..; pwd)
     readonly agentJar="${rootDir}/agent/target/helidon-jlink-agent.jar"
     readonly pluginJar="${rootDir}/plugin/target/helidon-jlink.jar"
+    readonly pluginDir="${rootDir}/plugin/target/classes"
+    readonly mainModule="helidon.jlink"
+    readonly mainClass="io.helidon.jlink.Main"
+
+    [[ ${JAVA_11_HOME} ]] && javaHome=${JAVA_11_HOME} || javaHome=${JAVA_HOME}
+
+    assertExists "${javaHome}/bin/java"
     assertExists ${agentJar}
     assertExists ${pluginJar}
+    pluginModule=${mainModule}
+    pluginPath=${pluginJar}
+
     [[ -e hlink-image ]] && rm -rf "hlink-image"
 
     while (( ${#} > 0 )); do
         case "${1}" in
             -h | --help) usage ;;
             -d | --debug) setDebug ;;
+            --dir) pluginPath=${pluginDir}; pluginModule="${mainModule}/${mainClass}" ;;
             *) appendVar appArgs ${1} ;;
         esac
         shift
