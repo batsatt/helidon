@@ -44,17 +44,20 @@ public class Agent {
     public static void premain(String agentArgs, Instrumentation inst) throws Exception {
         System.out.println("BEGIN premain");
 
-        // Get jdk and helidon jlink modules
+        // Modify the  jdk.jlink module to export its plugin and internal packages to our module
 
         Module jlinkModule = findModule("jdk.jlink");
         Module helidonModule = findModule("helidon.jlink");
-
-        // Modify the jdk module to export its plugin and internal packages to our module
-
         Set<Module> exportTo = singleton(helidonModule);
         Map<String, Set<Module>> extraExports = Map.of("jdk.tools.jlink.plugin", exportTo,
                                                        "jdk.tools.jlink.internal", exportTo);
         inst.redefineModule(jlinkModule, emptySet(), extraExports, emptyMap(), emptySet(), emptyMap());
+
+        // Modify the java.base module to export its jdk.internal.module package to our module
+
+        Module javaBaseModule = findModule("java.base");
+        extraExports = Map.of("jdk.internal.module", exportTo);
+        inst.redefineModule(javaBaseModule, emptySet(), extraExports, emptyMap(), emptySet(), emptyMap());
 
         // Modify our module so it provides our plug-in as a service
 

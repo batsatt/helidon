@@ -18,13 +18,13 @@
     </modules>
 
     <dependencies>
-<!--
-        <dependency>
-            <groupId>org.jsoup</groupId>
-            <artifactId>jsoup</artifactId>
-            <version>1.11.3</version>
-        </dependency>
--->
+        <!--
+                <dependency>
+                    <groupId>org.jsoup</groupId>
+                    <artifactId>jsoup</artifactId>
+                    <version>1.11.3</version>
+                </dependency>
+        -->
     </dependencies>
     <build>
         <plugins>
@@ -35,7 +35,8 @@
                 <configuration>
                     <source>11</source>
                     <target>11</target>
-                     <compilerArgs>
+                    <compilerArgs>
+                        <arg>--add-exports="java.base/jdk.internal.module=helidon.jlink"</arg>
                         <arg>--add-exports="jdk.jlink/jdk.tools.jlink.plugin=helidon.jlink"</arg>
                         <arg>--add-exports="jdk.jlink/jdk.tools.jlink.internal=helidon.jlink"</arg>
                     </compilerArgs>
