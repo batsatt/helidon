@@ -62,7 +62,7 @@ public class SimpleFormatter extends Formatter {
                 final StringBuilder sb = new StringBuilder(256);
                 //appendDateTime(record.getMillis(), sb).append(' ');
                 if (record.getLevel().intValue() > Level.INFO.intValue()) {
-                    sb.append(record.getLevel().getLocalizedName()).append(' ');
+                    sb.append(record.getLevel().getLocalizedName()).append(": ");
                 }
                 //appendName(record.getLoggerName(), sb).append(' ');
                 // appendName(Thread.currentThread().getName(), sb).append(' ');

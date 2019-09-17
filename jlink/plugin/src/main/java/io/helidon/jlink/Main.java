@@ -23,6 +23,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.spi.ToolProvider;
 
+import io.helidon.jlink.plugins.HelidonPlugin;
+
 /**
  * TODO: Describe
  */
@@ -62,10 +64,11 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
 
     private final String[] args;
     private final List<String> jlinkArgs;
-    private Path jmodsDir;
-    private Path jmodsOverridesDir;
+    private Path jmodDir;
+    private Path jmodOverridesDir;
     private Path appModulePath;
     private Path imageDir;
+    private StringBuilder pluginArgs;
     private final ToolProvider jlink;
 
     public static void main(String[] args) {
@@ -75,8 +78,9 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
     private Main(String... args) {
         this.args = args;
         this.jlinkArgs = new ArrayList<>();
-        this.jmodsDir = JAVA_HOME_DIR.resolve("jmods");
+        this.jmodDir = JAVA_HOME_DIR.resolve("jmods");
         this.imageDir = CURRENT_DIR.resolve("hlink-image").toAbsolutePath();
+        this.pluginArgs = new StringBuilder();
         this.jlink = ToolProvider.findFirst("jlink").orElseThrow();
         parse();
     }
@@ -94,9 +98,9 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
             final String arg = args[i];
             if (arg.startsWith("--")) {
                 if (arg.equalsIgnoreCase("--jmodOverridesDir")) {
-                    jmodsOverridesDir = assertDir(Paths.get(argAt(++i)));
-                } else if (arg.equalsIgnoreCase("--jmodsDir")) {
-                    jmodsDir = assertDir(Paths.get(argAt(++i)));
+                    jmodOverridesDir = assertDir(Paths.get(argAt(++i)));
+                } else if (arg.equalsIgnoreCase("--jmodDir")) {
+                    jmodDir = assertDir(Paths.get(argAt(++i)));
                 } else if (arg.equalsIgnoreCase("--imageDir")) {
                     imageDir = assertDir(Paths.get(argAt(++i)));
                     if (Files.exists(imageDir)) {
@@ -111,11 +115,6 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
                 appModulePath = assertExists(Paths.get(arg));
             }
         }
-
-        if (jmodsOverridesDir != null) {
-            addModulePath(jmodsOverridesDir);
-        }
-        addModulePath(jmodsDir);
 
         if (appModulePath == null) {
             throw new IllegalArgumentException("applicationModulePath required");
@@ -133,15 +132,29 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
             addArgument("--add-modules", thisModuleName);
         }
 
+        appendPluginArg(null, appModulePath);
+        appendPluginArg(HelidonPlugin.JMOD_DIR_KEY, jmodDir);
+        if (jmodOverridesDir != null) {
+            appendPluginArg(HelidonPlugin.JMOD_OVERRIDES_DIR_KEY, jmodOverridesDir);
+        }
+        addArgument("--" + HelidonPlugin.NAME + "=" + pluginArgs.toString());
+
         addArgument("--output", imageDir);
-
-        addArgument("--helidon", appModulePath);
-
         addArgument("--bind-services");
         addArgument("--no-header-files");
         addArgument("--no-man-pages");
         addArgument("--strip-debug"); // TODO: option?
         addArgument("--compress", "2");
+    }
+
+    private void appendPluginArg(String key, Path value) {
+        if (pluginArgs.length() > 0) {
+            pluginArgs.append(':');
+        }
+        if (key != null) {
+            pluginArgs.append(key).append('=');
+        }
+        pluginArgs.append(value);
     }
 
     private static Path getModulePath(Class<?> moduleClass) {

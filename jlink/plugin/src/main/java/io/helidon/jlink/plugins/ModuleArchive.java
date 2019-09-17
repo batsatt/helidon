@@ -35,20 +35,21 @@ public class ModuleArchive extends DelegatingArchive {
      * Constructor.
      *
      * @param delegate The delegate.
+     * @param javaModuleNames The names of all Java modules.
      */
-    public ModuleArchive(Archive delegate, ModuleDescriptor descriptor) {
-        super(delegate, descriptor);
+    public ModuleArchive(Archive delegate, ModuleDescriptor descriptor, Set<String> javaModuleNames) {
+        super(delegate, descriptor, javaModuleNames);
         this.jdkDependencies = collectJdkDependencies();
         LOG.info("        JDK dependencies: %s", jdkDependencies);
     }
 
     @Override
-    public Set<String> jdkDependencies() {
+    public Set<String> javaModuleDependencies() {
         return jdkDependencies;
     }
 
     private Set<String> collectJdkDependencies() {
-        final Set<String> jdkModules = jdkModuleNames();
+        final Set<String> jdkModules = javaModuleNames();
         final ModuleDescriptor descriptor = descriptor();
         return descriptor.requires()
                          .stream()

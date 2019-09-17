@@ -18,48 +18,33 @@ package io.helidon.jlink.plugins;
 
 import java.io.IOException;
 import java.lang.module.ModuleDescriptor;
-import java.lang.module.ModuleFinder;
 import java.nio.file.Path;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import jdk.tools.jlink.internal.Archive;
 
 /**
- * TODO: Describe
+ * An Archive wrapper base class.
  */
 public abstract class DelegatingArchive implements Archive {
     private static final AtomicReference<Set<String>> JDK_MODULES = new AtomicReference<>();
     private final Archive delegate;
     private final ModuleDescriptor descriptor;
-
-    /**
-     * Returns all JDK module names.
-     *
-     * @return The names.
-     */
-    static Set<String> jdkModuleNames() {
-        if (JDK_MODULES.get() == null) {
-            JDK_MODULES.set(ModuleFinder.ofSystem()
-                                        .findAll()
-                                        .stream()
-                                        .map(r -> r.descriptor().name())
-                                        .collect(Collectors.toSet()));
-        }
-        return JDK_MODULES.get();
-    }
+    private final Set<String> javaModuleNames;
 
     /**
      * Constructor.
      *
      * @param delegate The delegate.
      * @param descriptor The descriptor.
+     * @param javaModuleNames The names of all Java modules.
      */
-    DelegatingArchive(Archive delegate, ModuleDescriptor descriptor) {
+    DelegatingArchive(Archive delegate, ModuleDescriptor descriptor, Set<String> javaModuleNames) {
         this.delegate = delegate;
         this.descriptor = descriptor;
+        this.javaModuleNames = javaModuleNames; ;
     }
 
     /**
@@ -97,9 +82,18 @@ public abstract class DelegatingArchive implements Archive {
     }
 
     /**
-     * Returns the set of JDK dependencies.
+     * Returns all Java module names.
+     *
+     * @return The names.
+     */
+    Set<String> javaModuleNames() {
+        return javaModuleNames;
+    }
+
+    /**
+     * Returns the set of Java module dependencies.
      *
      * @return The set.
      */
-    public abstract Set<String> jdkDependencies();
+    public abstract Set<String> javaModuleDependencies();
 }

@@ -54,11 +54,16 @@ public class AutomaticArchive extends DelegatingArchive {
      *
      * @param delegate The delegate archive.
      * @param descriptor The descriptor.
+     * @param javaModuleNames The names of all Java modules.
      * @param version The archive version.
      * @param jdkVersion The JDK version.
      */
-    public AutomaticArchive(Archive delegate, ModuleDescriptor descriptor, Runtime.Version version, Runtime.Version jdkVersion) {
-        super(delegate, descriptor);
+    public AutomaticArchive(Archive delegate,
+                            ModuleDescriptor descriptor,
+                            Set<String> javaModuleNames,
+                            Runtime.Version version,
+                            Runtime.Version jdkVersion) {
+        super(delegate, descriptor, javaModuleNames);
         this.version = version;
         this.manifest = manifest();
         this.isMultiRelease = "true".equalsIgnoreCase(mainAttribute(Attributes.Name.MULTI_RELEASE));
@@ -69,7 +74,7 @@ public class AutomaticArchive extends DelegatingArchive {
     }
 
     @Override
-    public Set<String> jdkDependencies() {
+    public Set<String> javaModuleDependencies() {
         return jdkDependencies;
     }
 
@@ -116,7 +121,7 @@ public class AutomaticArchive extends DelegatingArchive {
             throw new RuntimeException("Could not collect dependencies of " + getPath());
         }
 
-        final Set<String> jdkModules = jdkModuleNames();
+        final Set<String> jdkModules = javaModuleNames();
         return Arrays.stream(out.toString().split("\\n"))
                      .map(String::trim)
                      .filter(s -> !s.isEmpty())
