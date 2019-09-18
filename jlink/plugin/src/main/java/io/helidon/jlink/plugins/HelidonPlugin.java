@@ -133,17 +133,15 @@ public class HelidonPlugin implements Plugin {
     }
 
     private void addEntries(ResourcePoolBuilder pool) {
-        allArchives.stream()
-                   .filter(archive -> !archive.isAutomatic()) // TODO: remove filter once we add module-info.class.
-                   .forEach(archive -> {
-                       final String moduleName = archive.moduleName();
-                       final Map<Boolean, List<Archive.Entry>> partitionedEntries;
-                       try (Stream<Archive.Entry> entries = archive.entries()) {
-                           partitionedEntries = entries.collect(Collectors.partitioningBy(n -> n.type() == CLASS_OR_RESOURCE));
-                       }
-                       addEntries(moduleName, partitionedEntries.get(false), pool);
-                       addEntries(moduleName, partitionedEntries.get(true), pool);
-                   });
+        allArchives.forEach(archive -> {
+            final String moduleName = archive.moduleName();
+            final Map<Boolean, List<Archive.Entry>> partitionedEntries;
+            try (Stream<Archive.Entry> entries = archive.entries()) {
+                partitionedEntries = entries.collect(Collectors.partitioningBy(n -> n.type() == CLASS_OR_RESOURCE));
+            }
+            addEntries(moduleName, partitionedEntries.get(false), pool);
+            addEntries(moduleName, partitionedEntries.get(true), pool);
+        });
     }
 
     private static void addEntries(String moduleName, List<Archive.Entry> entries, ResourcePoolBuilder pool) {

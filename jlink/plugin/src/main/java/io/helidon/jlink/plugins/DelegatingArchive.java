@@ -98,6 +98,15 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
     }
 
     /**
+     * Returns the delegate.
+     *
+     * @return The delegate.
+     */
+    Archive delegate() {
+        return delegate;
+    }
+
+    /**
      * Returns all Java module names.
      *
      * @return The names.

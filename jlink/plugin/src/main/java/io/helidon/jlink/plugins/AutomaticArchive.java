@@ -16,8 +16,10 @@
 
 package io.helidon.jlink.plugins;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintStream;
 import java.io.UncheckedIOException;
 import java.lang.module.ModuleDescriptor;
@@ -34,6 +36,7 @@ import java.util.stream.Stream;
 
 import io.helidon.jlink.logging.Log;
 
+import jdk.internal.module.ModuleInfoWriter;
 import jdk.tools.jlink.internal.Archive;
 
 import static jdk.tools.jlink.internal.Archive.Entry.EntryType.CLASS_OR_RESOURCE;
@@ -67,13 +70,13 @@ public class AutomaticArchive extends DelegatingArchive {
                             Runtime.Version jdkVersion) {
         super(delegate, descriptor, javaModuleNames);
         this.version = version;
+        this.moduleInfo = createModuleInfo();
         this.manifest = manifest();
         this.isMultiRelease = "true".equalsIgnoreCase(mainAttribute(Attributes.Name.MULTI_RELEASE));
         this.releaseFeatureVersion = Integer.toString(jdkVersion.feature());
         LOG.info("   Multi release version: %s", isMultiRelease ? releaseFeatureVersion : "none");
         this.jdkDependencies = collectJdkDependencies();
         LOG.info("        JDK dependencies: %s", jdkDependencies);
-        moduleInfo = createModuleInfo();
     }
 
     @Override
@@ -143,6 +146,37 @@ public class AutomaticArchive extends DelegatingArchive {
     }
 
     private Archive.Entry createModuleInfo() {
+        final ModuleDescriptor descriptor = ModuleDescriptor.newModule(moduleName())
+                                                            .requires("java.base")
+                                                            .mainClass("is.automatic.Module")
+                                                            .build();
+        final ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try {
+            ModuleInfoWriter.write(descriptor, out);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return new ModuleInfoEntry(out.toByteArray());
+    }
 
+    private class ModuleInfoEntry extends Archive.Entry {
+        private static final String NAME = "module-info.class";
+
+        private final byte[] data;
+
+        ModuleInfoEntry(byte[] data) {
+            super(delegate(), NAME, NAME, CLASS_OR_RESOURCE);
+            this.data = data;
+        }
+
+        @Override
+        public long size() {
+            return data.length;
+        }
+
+        @Override
+        public InputStream stream() {
+            return new ByteArrayInputStream(data);
+        }
     }
 }
