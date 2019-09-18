@@ -112,4 +112,11 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
      * @return The set.
      */
     public abstract Set<String> javaModuleDependencies();
+
+    /**
+     * Returns whether or not this is an automatic module.
+     *
+     * @return {@code true} if automatic.
+     */
+    public abstract boolean isAutomatic();
 }
