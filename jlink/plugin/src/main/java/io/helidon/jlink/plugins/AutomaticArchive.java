@@ -30,6 +30,7 @@ import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 import java.util.spi.ToolProvider;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import io.helidon.jlink.logging.Log;
 
@@ -48,6 +49,7 @@ public class AutomaticArchive extends DelegatingArchive {
     private final boolean isMultiRelease;
     private final String releaseFeatureVersion;
     private final Set<String> jdkDependencies;
+    private final Archive.Entry moduleInfo;
 
     /**
      * Constructor.
@@ -71,11 +73,22 @@ public class AutomaticArchive extends DelegatingArchive {
         LOG.info("   Multi release version: %s", isMultiRelease ? releaseFeatureVersion : "none");
         this.jdkDependencies = collectJdkDependencies();
         LOG.info("        JDK dependencies: %s", jdkDependencies);
+        moduleInfo = createModuleInfo();
+    }
+
+    @Override
+    public Stream<Entry> entries() {
+        return Stream.concat(super.entries(), Stream.of(moduleInfo));
     }
 
     @Override
     public Set<String> javaModuleDependencies() {
         return jdkDependencies;
+    }
+
+    @Override
+    public boolean isAutomatic() {
+        return true;
     }
 
     private String mainAttribute(Attributes.Name name) {
@@ -127,5 +140,9 @@ public class AutomaticArchive extends DelegatingArchive {
                      .filter(s -> !s.isEmpty())
                      .filter(jdkModules::contains)
                      .collect(Collectors.toSet());
+    }
+
+    private Archive.Entry createModuleInfo() {
+
     }
 }

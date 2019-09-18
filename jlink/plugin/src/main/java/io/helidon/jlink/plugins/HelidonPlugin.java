@@ -28,6 +28,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -35,6 +36,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import io.helidon.jlink.logging.Log;
 
@@ -49,6 +51,7 @@ import jdk.tools.jlink.plugin.ResourcePoolBuilder;
 
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
+import static jdk.tools.jlink.internal.Archive.Entry.EntryType.CLASS_OR_RESOURCE;
 
 /**
  * TODO: Describe
@@ -59,20 +62,14 @@ public class HelidonPlugin implements Plugin {
     public static final String JMOD_OVERRIDES_DIR_KEY = "jmodOverridesDir";
     private static final Log LOG = Log.getLog(NAME);
 
-    private String appModuleName;
-    private Path appModulePath;
-    private Path appLibsDir;
-    private Path jmodDir;
-    private Path jmodOverridesDir;
+    private final List<DelegatingArchive> appArchives = new ArrayList<>();
+    private final List<DelegatingArchive> javaArchives = new ArrayList<>();
+    private final List<DelegatingArchive> allArchives = new ArrayList<>();
     private Map<String, ModuleReference> javaModules;
     private Set<String> javaModuleNames;
     private Runtime.Version javaBaseVersion;
     private ModuleReference appModule;
     private Collection<ModuleReference> appLibModules;
-    private DelegatingArchive appArchive;
-    private List<DelegatingArchive> appArchives;
-    private List<DelegatingArchive> javaArchives;
-    private List<DelegatingArchive> allArchives;
     private Set<String> javaDependencies;
 
     /**
@@ -92,15 +89,20 @@ public class HelidonPlugin implements Plugin {
     }
 
     @Override
+    public Category getType() {
+        return Category.FILTER; // So sorts before SystemModulesPlugin!
+    }
+
+    @Override
     public void configure(Map<String, String> config) {
-        appModulePath = configPath(NAME, config);
-        appLibsDir = appModulePath.getParent().resolve("libs"); // Asserted valid in Main
-        jmodDir = configPath(JMOD_DIR_KEY, config);
-        jmodOverridesDir = configPath(JMOD_OVERRIDES_DIR_KEY, config);
+        final Path appModulePath = configPath(NAME, config);
+        final Path appLibsDir = appModulePath.getParent().resolve("libs"); // Asserted valid in Main
+        final Path jmodDir = configPath(JMOD_DIR_KEY, config);
+        final Path jmodOverridesDir = configPath(JMOD_OVERRIDES_DIR_KEY, config);
+        final String appModuleName = getModuleName(appModulePath);
         javaModules = javaModules(jmodDir, jmodOverridesDir);
         javaModuleNames = javaModules.keySet();
         javaBaseVersion = toRuntimeVersion(javaModules.get("java.base"));
-        appModuleName = getModuleName(appModulePath);
         appModule = ModuleFinder.of(appModulePath).find(appModuleName).orElseThrow();
         appLibModules = toModules(appLibsDir, false);
         LOG.info("appModuleName: %s\n" +
@@ -119,30 +121,33 @@ public class HelidonPlugin implements Plugin {
             LOG.info("Required Java modules: %s", javaDependencies);
             LOG.info("Collecting required Java archives");
             collectRequiredJavaArchives();
-            appendArchives();
+            sortArchives();
             LOG.info("Java Archives: %s", javaArchives);
             LOG.info(" App Archives: %s", appArchives);
-
-/*
-        in.moduleView().modules().forEach(m -> System.out.println("module: " + m.name()));
-
-        module: helidon.jlink
-        module: jdk.jdeps
-        module: jdk.jlink
-        module: java.compiler
-        module: java.instrument
-        module: jdk.internal.opt
-        module: jdk.compiler
-        module: java.base
-
-        out is empty!
- */
-
-            return null;
+            addEntries(out);
+            return out.build();
         } catch (Exception e) {
             e.printStackTrace();
             throw e;
         }
+    }
+
+    private void addEntries(ResourcePoolBuilder pool) {
+        allArchives.stream()
+                   .filter(archive -> !archive.isAutomatic()) // TODO: remove filter once we add module-info.class.
+                   .forEach(archive -> {
+                       final String moduleName = archive.moduleName();
+                       final Map<Boolean, List<Archive.Entry>> partitionedEntries;
+                       try (Stream<Archive.Entry> entries = archive.entries()) {
+                           partitionedEntries = entries.collect(Collectors.partitioningBy(n -> n.type() == CLASS_OR_RESOURCE));
+                       }
+                       addEntries(moduleName, partitionedEntries.get(false), pool);
+                       addEntries(moduleName, partitionedEntries.get(true), pool);
+                   });
+    }
+
+    private static void addEntries(String moduleName, List<Archive.Entry> entries, ResourcePoolBuilder pool) {
+        entries.forEach(e -> pool.add(new ArchivePoolEntry(moduleName, e)));
     }
 
     private Map<String, ModuleReference> javaModules(Path jmodDir, Path jmodOverridesDir) {
@@ -260,24 +265,29 @@ public class HelidonPlugin implements Plugin {
     }
 
     private void collectAppArchives() {
-        appArchives = new ArrayList<>();
-        appArchive = toArchive(appModule);
+        final DelegatingArchive appArchive = toArchive(appModule);
         appArchives.add(appArchive);
         appLibModules.forEach(module -> appArchives.add(toArchive(module)));
     }
 
     private void collectRequiredJavaArchives() {
-        javaArchives = new ArrayList<>();
-        javaDependencies.forEach(javaModuleName -> {
-            final DelegatingArchive javaArchive = toArchive(javaModules.get(javaModuleName));
-            javaArchives.add(javaArchive);
-        });
+        final Set<String> added = new HashSet<>();
+        javaDependencies.forEach(moduleName -> addJavaArchive(moduleName, added));
     }
 
-    private void appendArchives() {
+    private void addJavaArchive(String moduleName, Set<String> added) {
+        if (!added.contains(moduleName)) {
+            final DelegatingArchive archive = toArchive(javaModules.get(moduleName));
+            javaArchives.add(archive);
+            added.add(moduleName);
+            archive.javaModuleDependencies().forEach(name -> addJavaArchive(name, added));
+        }
+    }
+
+    private void sortArchives() {
         javaArchives.sort(null);
         appArchives.sort(null);
-        allArchives = new ArrayList<>(javaArchives);
+        allArchives.addAll(javaArchives);
         allArchives.addAll(appArchives);
     }
 

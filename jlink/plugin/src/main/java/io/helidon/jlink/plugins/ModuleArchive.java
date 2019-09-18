@@ -48,6 +48,11 @@ public class ModuleArchive extends DelegatingArchive {
         return jdkDependencies;
     }
 
+    @Override
+    public boolean isAutomatic() {
+        return false;
+    }
+
     private Set<String> collectJdkDependencies() {
         final Set<String> jdkModules = javaModuleNames();
         final ModuleDescriptor descriptor = descriptor();
