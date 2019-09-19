@@ -17,6 +17,7 @@
 package io.helidon.jlink.plugins;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.lang.module.FindException;
 import java.lang.module.ModuleDescriptor;
 import java.lang.module.ModuleFinder;
@@ -186,14 +187,20 @@ public class HelidonPlugin implements Plugin {
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(modulesDir)) {
             for (Path entry : stream) {
                 try {
-                    final Runtime.Version version = jmods ? Runtime.version() : javaBaseVersion;
-                    ModulePath.of(version, jmods, entry).findAll().forEach(module -> {
-                        final String moduleName = module.descriptor().name();
-                        modules.computeIfAbsent(moduleName, k -> new ArrayList<>()).add(module);
-                    });
+                    addModule(entry, jmods, modules);
                 } catch (FindException e) {
-                    error.set(true);
-                    LOG.warn(e.getMessage());
+                    if (e.getMessage().toLowerCase().contains("unable to derive module descriptor")) {
+                        try {
+                            entry = addAutomaticModuleNameTo(entry);
+                            addModule(entry, jmods, modules);
+                        } catch (FindException e2) {
+                            error.set(true);
+                            LOG.warn(e2.getMessage());
+                        }
+                    } else {
+                        error.set(true);
+                        LOG.warn(e.getMessage());
+                    }
                 }
             }
         } catch (IOException e) {
@@ -206,6 +213,42 @@ public class HelidonPlugin implements Plugin {
                       .stream()
                       .map(HelidonPlugin::select)
                       .collect(Collectors.toSet());
+    }
+
+    // TODO: This is going pretty far, but for now...
+    private static final Map<String, String> FILE_NAME_TO_MODULE_NAME = Map.of(
+        "jboss-interceptors-api_1.2_spec-1.0.0.Final.jar", // Doesn't have an "Automatic-Module-Name" manifest entry
+        "javax.interceptor.api:1.2"
+    );
+
+    private Path addAutomaticModuleNameTo(Path moduleFile) {
+        final String fileName = moduleFile.getFileName().toString();
+        final String moduleName = FILE_NAME_TO_MODULE_NAME.get(fileName);
+        if (moduleName != null) {
+            final String[] parts = moduleName.split(":");
+            final String name = parts[0];
+            final String version = parts[1];
+            final String newFileName = name.replace(".", "-") + "-" + version + ".jar";
+            final Path newFile = moduleFile.getParent().resolve(newFileName);
+            if (Files.exists(newFile)) {
+                LOG.warn("Cannot rename %s to %s: file already exists!");
+            } else {
+                try {
+                    moduleFile = Files.move(moduleFile, newFile);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }
+        }
+        return moduleFile;
+    }
+
+    private void addModule(Path path, boolean jmods, Map<String, List<ModuleReference>> modules) throws FindException {
+        final Runtime.Version version = jmods ? Runtime.version() : javaBaseVersion;
+        ModulePath.of(version, jmods, path).findAll().forEach(module -> {
+            final String moduleName = module.descriptor().name();
+            modules.computeIfAbsent(moduleName, k -> new ArrayList<>()).add(module);
+        });
     }
 
     private static ModuleReference select(List<ModuleReference> duplicates) {
