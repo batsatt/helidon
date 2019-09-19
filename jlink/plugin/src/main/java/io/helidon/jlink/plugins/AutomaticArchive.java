@@ -45,6 +45,9 @@ import static jdk.tools.jlink.internal.Archive.Entry.EntryType.CLASS_OR_RESOURCE
  * An archive representing an automatic module.
  */
 public class AutomaticArchive extends DelegatingArchive {
+    public static final String AUTOMATIC_MODULE_MARKER_PATH = "META-INF/an.automatic.module";
+    private static final byte[] AUTOMATIC_MODULE_MARKER_CONTENT = new byte[0];
+
     private static final Log LOG = Log.getLog("automatic-archive");
     private static final ToolProvider JDEPS = ToolProvider.findFirst("jdeps").orElseThrow();
     private final Runtime.Version version;
@@ -52,7 +55,7 @@ public class AutomaticArchive extends DelegatingArchive {
     private final boolean isMultiRelease;
     private final String releaseFeatureVersion;
     private final Set<String> jdkDependencies;
-    private final Archive.Entry moduleInfo;
+    private final List<Archive.Entry> extraEntries;
 
     /**
      * Constructor.
@@ -70,18 +73,20 @@ public class AutomaticArchive extends DelegatingArchive {
                             Runtime.Version jdkVersion) {
         super(delegate, descriptor, javaModuleNames);
         this.version = version;
-        this.moduleInfo = createModuleInfo();
+        this.extraEntries = new ArrayList<>();
         this.manifest = manifest();
         this.isMultiRelease = "true".equalsIgnoreCase(mainAttribute(Attributes.Name.MULTI_RELEASE));
         this.releaseFeatureVersion = Integer.toString(jdkVersion.feature());
         LOG.info("   Multi release version: %s", isMultiRelease ? releaseFeatureVersion : "none");
         this.jdkDependencies = collectJdkDependencies();
         LOG.info("        JDK dependencies: %s", jdkDependencies);
+        addModuleInfoEntry();
+        addAutomaticMarkerEntry();
     }
 
     @Override
     public Stream<Entry> entries() {
-        return Stream.concat(super.entries(), Stream.of(moduleInfo));
+        return Stream.concat(super.entries(), extraEntries.stream());
     }
 
     @Override
@@ -145,27 +150,33 @@ public class AutomaticArchive extends DelegatingArchive {
                      .collect(Collectors.toSet());
     }
 
-    private Archive.Entry createModuleInfo() {
-        final ModuleDescriptor descriptor = ModuleDescriptor.newModule(moduleName())
-                                                            .requires("java.base")
-                                                            .mainClass("is.automatic.Module")
-                                                            .build();
-        final ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try {
-            ModuleInfoWriter.write(descriptor, out);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
+    private void addModuleInfoEntry() {
+        final ModuleDescriptor existing = descriptor();
+
+        // Create a new descriptor from the existing one, but without the automatic flag
+
+        final ModuleDescriptor.Builder builder = ModuleDescriptor.newModule(moduleName());
+        if (existing.version().isPresent()) {
+            builder.version(existing.version().get());
         }
-        return new ModuleInfoEntry(out.toByteArray());
+        builder.packages(existing.packages());
+        existing.provides().forEach(builder::provides);
+        if (existing.mainClass().isPresent()) {
+            builder.mainClass(existing.mainClass().get());
+        }
+
+        extraEntries.add(new ModuleInfoArchiveEntry(builder.build()));
     }
 
-    private class ModuleInfoEntry extends Archive.Entry {
-        private static final String NAME = "module-info.class";
+    private void addAutomaticMarkerEntry() {
+        extraEntries.add(new ByteArrayArchiveEntry(AUTOMATIC_MODULE_MARKER_PATH, AUTOMATIC_MODULE_MARKER_CONTENT));
+    }
 
+    private class ByteArrayArchiveEntry extends Archive.Entry {
         private final byte[] data;
 
-        ModuleInfoEntry(byte[] data) {
-            super(delegate(), NAME, NAME, CLASS_OR_RESOURCE);
+        ByteArrayArchiveEntry(String name, byte[] data) {
+            super(delegate(), name, name, CLASS_OR_RESOURCE);
             this.data = data;
         }
 
@@ -178,5 +189,23 @@ public class AutomaticArchive extends DelegatingArchive {
         public InputStream stream() {
             return new ByteArrayInputStream(data);
         }
+    }
+
+    private class ModuleInfoArchiveEntry extends ByteArrayArchiveEntry {
+        private static final String NAME = "module-info.class";
+
+        ModuleInfoArchiveEntry(ModuleDescriptor descriptor) {
+            super(NAME, AutomaticArchive.compile(descriptor));
+        }
+    }
+
+    private static byte[] compile(ModuleDescriptor descriptor) {
+        final ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try {
+            ModuleInfoWriter.write(descriptor, out);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return out.toByteArray();
     }
 }
