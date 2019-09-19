@@ -28,6 +28,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 import java.util.spi.ToolProvider;
@@ -56,6 +57,7 @@ public class AutomaticArchive extends DelegatingArchive {
     private final String releaseFeatureVersion;
     private final Set<String> jdkDependencies;
     private final List<Archive.Entry> extraEntries;
+    private Predicate<Archive.Entry> entryFilter = entry -> true;
 
     /**
      * Constructor.
@@ -86,7 +88,7 @@ public class AutomaticArchive extends DelegatingArchive {
 
     @Override
     public Stream<Entry> entries() {
-        return Stream.concat(super.entries(), extraEntries.stream());
+        return Stream.concat(super.entries().filter(entryFilter), extraEntries.stream());
     }
 
     @Override
@@ -150,16 +152,41 @@ public class AutomaticArchive extends DelegatingArchive {
                      .collect(Collectors.toSet());
     }
 
+    // TODO: Not a legal package name component: 'enum'
+    private static String EXCLUDED_PACKAGE = "org.apache.commons.lang.enum";
+    private static String EXCLUDED_PACKAGE_PATH = EXCLUDED_PACKAGE.replace(".", "/") + "/";
+    private static Predicate<Archive.Entry> EXCLUDED_ENTRY = entry -> {
+        if (entry.name().startsWith(EXCLUDED_PACKAGE_PATH)) {
+            return false;
+        }
+        return true;
+    };
+
     private void addModuleInfoEntry() {
         final ModuleDescriptor existing = descriptor();
+        final String moduleName = moduleName();
+        if (moduleName.equals("commons.lang")) {
+            entryFilter = EXCLUDED_ENTRY;
+        }
 
-        // Create a new descriptor from the existing one, but without the automatic flag
+        // Create a new open module descriptor from the existing one, without the automatic flag
 
-        final ModuleDescriptor.Builder builder = ModuleDescriptor.newModule(moduleName());
+        final ModuleDescriptor.Builder builder = ModuleDescriptor.newOpenModule(moduleName);
         if (existing.version().isPresent()) {
             builder.version(existing.version().get());
         }
-        builder.packages(existing.packages());
+
+        final Set<String> packages = existing.packages()
+                                             .stream()
+                                             .filter(pkg -> {
+                                                 if (EXCLUDED_PACKAGE.equals(pkg)) {
+                                                     entryFilter = EXCLUDED_ENTRY;
+                                                     return false;
+                                                 }
+                                                 return true;
+                                             })
+                                             .collect(Collectors.toSet());
+        builder.packages(packages);
         existing.provides().forEach(builder::provides);
         if (existing.mainClass().isPresent()) {
             builder.mainClass(existing.mainClass().get());
