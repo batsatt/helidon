@@ -16,28 +16,24 @@
 
 package io.helidon.jlink.plugins;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.PrintStream;
 import java.io.UncheckedIOException;
 import java.lang.module.ModuleDescriptor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Predicate;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 import java.util.spi.ToolProvider;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import io.helidon.jlink.logging.Log;
 
-import jdk.internal.module.ModuleInfoWriter;
 import jdk.tools.jlink.internal.Archive;
 
 import static jdk.tools.jlink.internal.Archive.Entry.EntryType.CLASS_OR_RESOURCE;
@@ -56,8 +52,6 @@ public class AutomaticArchive extends DelegatingArchive {
     private final boolean isMultiRelease;
     private final String releaseFeatureVersion;
     private final Set<String> jdkDependencies;
-    private final List<Archive.Entry> extraEntries;
-    private Predicate<Archive.Entry> entryFilter = entry -> true;
 
     /**
      * Constructor.
@@ -75,20 +69,14 @@ public class AutomaticArchive extends DelegatingArchive {
                             Runtime.Version jdkVersion) {
         super(delegate, descriptor, javaModuleNames);
         this.version = version;
-        this.extraEntries = new ArrayList<>();
         this.manifest = manifest();
         this.isMultiRelease = "true".equalsIgnoreCase(mainAttribute(Attributes.Name.MULTI_RELEASE));
         this.releaseFeatureVersion = Integer.toString(jdkVersion.feature());
         LOG.info("   Multi release version: %s", isMultiRelease ? releaseFeatureVersion : "none");
         this.jdkDependencies = collectJdkDependencies();
         LOG.info("        JDK dependencies: %s", jdkDependencies);
-        addModuleInfoEntry();
+        descriptor(createNonAutomaticDescriptor());
         addAutomaticMarkerEntry();
-    }
-
-    @Override
-    public Stream<Entry> entries() {
-        return Stream.concat(super.entries().filter(entryFilter), extraEntries.stream());
     }
 
     @Override
@@ -152,87 +140,64 @@ public class AutomaticArchive extends DelegatingArchive {
                      .collect(Collectors.toSet());
     }
 
-    // TODO: Not a legal package name component: 'enum'
-    private static String EXCLUDED_PACKAGE = "org.apache.commons.lang.enum";
-    private static String EXCLUDED_PACKAGE_PATH = EXCLUDED_PACKAGE.replace(".", "/") + "/";
-    private static Predicate<Archive.Entry> EXCLUDED_ENTRY = entry -> {
-        if (entry.name().startsWith(EXCLUDED_PACKAGE_PATH)) {
-            return false;
-        }
-        return true;
-    };
+    // TODO: Automatic modules just ignore illegal names (e.g. won't list "org.apache.commons.lang.enum" as a package) when
+    //       creating the descriptor, BUT...
+    //       The SystemModulesPlugin forces resolution using the packages COMPUTED from the ResourcePool, and also enforces
+    //       legal package names. For now, just filter out all such entries; clearly some other solution is needed!
+    private static Map<String, Set<String>> EXCLUDED_PACKAGES_BY_MODULE = Map.of(
+        "commons.lang", Set.of("org/apache/commons/lang/enum/")
+    );
 
-    private void addModuleInfoEntry() {
-        final ModuleDescriptor existing = descriptor();
-        final String moduleName = moduleName();
-        if (moduleName.equals("commons.lang")) {
-            entryFilter = EXCLUDED_ENTRY;
+    /**
+     * Create a ModuleDescriptor from the automatic one that will be resolvable and can be stored in the image.
+     * <p>
+     * Making this work correctly at runtime may require some modification of the module system (e.g. ModuleInfo),
+     * which can be accomplished by overriding java.base classes in the plugin. Such a modification will likely need to
+     * convert the descriptor loaded at runtime back to an automatic module.
+     *
+     * @return The descriptor.
+     */
+    private ModuleDescriptor createNonAutomaticDescriptor() {
+        final ModuleDescriptor existing = super.descriptor();
+        final String moduleName = existing.name();
+
+        // Setup excluded packages filter if needed
+
+        final Set<String> excludedPackagePaths = EXCLUDED_PACKAGES_BY_MODULE.get(moduleName);
+        if (excludedPackagePaths != null && !excludedPackagePaths.isEmpty()) {
+            entryFilter(entry -> {
+                for (String excludedPackage : excludedPackagePaths) {
+                    if (entry.name().startsWith(excludedPackage)) {
+                        LOG.warn("excluding illegal package '%s' from module '%s", entry.name(), moduleName);
+                        return false;
+                    }
+                }
+                return true;
+            });
         }
 
-        // Create a new open module descriptor from the existing one, without the automatic flag
+        // Create a new open module descriptor from the existing one, without the automatic flag,
+        // and export all packages.
 
         final ModuleDescriptor.Builder builder = ModuleDescriptor.newOpenModule(moduleName);
         if (existing.version().isPresent()) {
             builder.version(existing.version().get());
         }
 
-        final Set<String> packages = existing.packages()
-                                             .stream()
-                                             .filter(pkg -> {
-                                                 if (EXCLUDED_PACKAGE.equals(pkg)) {
-                                                     entryFilter = EXCLUDED_ENTRY;
-                                                     return false;
-                                                 }
-                                                 return true;
-                                             })
-                                             .collect(Collectors.toSet());
+        final Set<String> packages = existing.packages();
         builder.packages(packages);
+        packages.forEach(builder::exports);
+
         existing.provides().forEach(builder::provides);
+
         if (existing.mainClass().isPresent()) {
             builder.mainClass(existing.mainClass().get());
         }
 
-        extraEntries.add(new ModuleInfoArchiveEntry(builder.build()));
+        return builder.build();
     }
 
     private void addAutomaticMarkerEntry() {
-        extraEntries.add(new ByteArrayArchiveEntry(AUTOMATIC_MODULE_MARKER_PATH, AUTOMATIC_MODULE_MARKER_CONTENT));
-    }
-
-    private class ByteArrayArchiveEntry extends Archive.Entry {
-        private final byte[] data;
-
-        ByteArrayArchiveEntry(String name, byte[] data) {
-            super(delegate(), name, name, CLASS_OR_RESOURCE);
-            this.data = data;
-        }
-
-        @Override
-        public long size() {
-            return data.length;
-        }
-
-        @Override
-        public InputStream stream() {
-            return new ByteArrayInputStream(data);
-        }
-    }
-
-    private class ModuleInfoArchiveEntry extends ByteArrayArchiveEntry {
-        private static final String NAME = "module-info.class";
-
-        ModuleInfoArchiveEntry(ModuleDescriptor descriptor) {
-            super(NAME, AutomaticArchive.compile(descriptor));
-        }
-    }
-
-    private static byte[] compile(ModuleDescriptor descriptor) {
-        final ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try {
-            ModuleInfoWriter.write(descriptor, out);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        return out.toByteArray();
+        addEntry(new ByteArrayArchiveEntry(this, AUTOMATIC_MODULE_MARKER_PATH, AUTOMATIC_MODULE_MARKER_CONTENT));
     }
 }

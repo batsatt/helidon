@@ -19,8 +19,10 @@ package io.helidon.jlink.plugins;
 import java.io.IOException;
 import java.lang.module.ModuleDescriptor;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import jdk.tools.jlink.internal.Archive;
@@ -29,10 +31,11 @@ import jdk.tools.jlink.internal.Archive;
  * An Archive wrapper base class.
  */
 public abstract class DelegatingArchive implements Archive, Comparable<DelegatingArchive> {
-    private static final AtomicReference<Set<String>> JDK_MODULES = new AtomicReference<>();
     private final Archive delegate;
-    private final ModuleDescriptor descriptor;
     private final Set<String> javaModuleNames;
+    private ModuleDescriptor descriptor;
+    private final Map<String, Entry> extraEntries = new HashMap<>();
+    private Predicate<Entry> entryFilter = entry -> true;
 
     /**
      * Constructor.
@@ -44,7 +47,7 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
     DelegatingArchive(Archive delegate, ModuleDescriptor descriptor, Set<String> javaModuleNames) {
         this.delegate = delegate;
         this.descriptor = descriptor;
-        this.javaModuleNames = javaModuleNames; ;
+        this.javaModuleNames = javaModuleNames;
     }
 
     @Override
@@ -83,8 +86,12 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
     }
 
     @Override
-    public Stream<Entry> entries() {
-        return delegate.entries();
+    public final Stream<Entry> entries() {
+        return Stream.concat(delegate.entries()
+                                     .filter(entryFilter)
+                                     .filter(e -> !extraEntries.containsKey(e.name())),
+                             extraEntries.values()
+                                         .stream());
     }
 
     @Override
@@ -128,4 +135,70 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
      * @return {@code true} if automatic.
      */
     public abstract boolean isAutomatic();
+
+    void updateRequires(Map<String, String> substituteRequires) {
+        final String moduleName = moduleName();
+        final ModuleDescriptor current = descriptor();
+        if (needsUpdate(current.requires(), substituteRequires)) {
+
+            final ModuleDescriptor.Builder builder = ModuleDescriptor.newModule(moduleName, current.modifiers());
+
+            if (current.mainClass().isPresent()) {
+                builder.mainClass(current.mainClass().get());
+            }
+
+            current.provides().forEach(builder::provides);
+
+            builder.packages(current.packages());
+
+            if (current.version().isPresent()) {
+                builder.version(current.version().get());
+            }
+
+            current.requires().forEach(r -> {
+                final String name = r.name();
+                final String substitute = substituteRequires.get(name);
+                if (substitute == null) {
+                    builder.requires(r);
+                } else if (substitute.equals(moduleName)) {
+                    // Drop it.
+                    System.out.println("Dropping requires " + name + " from " + moduleName);
+                } else {
+                    if (r.compiledVersion().isPresent()) {
+                        builder.requires(r.modifiers(), substitute, r.compiledVersion().get());
+                    } else {
+                        builder.requires(r.modifiers(), substitute);
+                    }
+                }
+            });
+
+            current.exports().forEach(builder::exports);
+            current.opens().forEach(builder::opens);
+            current.uses().forEach(builder::uses);
+
+            descriptor(builder.build());
+        }
+    }
+
+    protected void descriptor(ModuleDescriptor descriptor) {
+        this.descriptor = descriptor;
+        addEntry(new ModuleInfoArchiveEntry(this, descriptor));
+    }
+
+    protected void entryFilter(Predicate<Archive.Entry> filter) {
+        this.entryFilter = filter;
+    }
+
+    protected void addEntry(Archive.Entry entry) {
+        extraEntries.put(entry.name(), entry);
+    }
+
+    private static boolean needsUpdate(Set<ModuleDescriptor.Requires> requires, Map<String, String> substituteRequires) {
+        for (ModuleDescriptor.Requires require : requires) {
+            if (substituteRequires.containsKey(require.name())) {
+                return true;
+            }
+        }
+        return false;
+    }
 }
