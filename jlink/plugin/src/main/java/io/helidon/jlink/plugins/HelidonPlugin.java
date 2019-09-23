@@ -64,9 +64,11 @@ public class HelidonPlugin implements Plugin {
     private static final Log LOG = Log.getLog(NAME);
 
     private final List<DelegatingArchive> appArchives = new ArrayList<>();
+    private final Map<String, DelegatingArchive> allJavaArchives = new HashMap<>();
     private final List<DelegatingArchive> javaArchives = new ArrayList<>();
     private final List<DelegatingArchive> allArchives = new ArrayList<>();
-    private final Map<String,String> moduleSubstitutionNames = new HashMap<>();
+    private final Map<String, DelegatingArchive> packageToExporter = new HashMap<>();
+    private final Map<String, String> moduleSubstitutionNames = new HashMap<>();
     private Map<String, ModuleReference> javaModules;
     private Set<String> javaModuleNames;
     private Runtime.Version javaBaseVersion;
@@ -118,6 +120,8 @@ public class HelidonPlugin implements Plugin {
             LOG.info("Collecting application archives");
             collectAppArchives();
             removeDuplicateExporters();
+            collectJavaArchives();
+            addJavaExporters();
             updateRequires();
             javaDependencies = appArchives.stream()
                                           .flatMap(a -> a.javaModuleDependencies().stream())
@@ -323,54 +327,55 @@ public class HelidonPlugin implements Plugin {
         appArchives.forEach(archive -> addPackageExporter(archive, packageToExporters));
 
         // For any package that has multiple exporters, select one and add the others to
-        // the removals list. Update the substitutions list as well.
+        // the removals list. Update the substitutions list and packageToExporter map.
 
         final List<DelegatingArchive> removals = new ArrayList<>();
 
         packageToExporters.forEach((packageName, exporters) -> {
+            DelegatingArchive selected;
             if (exporters.size() > 1) {
-                final DelegatingArchive selected = selectExporter(exporters);
+                selected = selectExporter(exporters);
                 exporters.remove(selected);
                 LOG.warn("Multiple modules export '%s': selected '%s', removing %s", packageName,
                          selected.moduleName(), exporters);
                 removals.addAll(exporters);
+                final String selectedModuleName = selected.moduleName();
                 exporters.forEach(archive -> {
-                    moduleSubstitutionNames.put(archive.moduleName(), selected.moduleName());
+                    moduleSubstitutionNames.put(archive.moduleName(), selectedModuleName);
                 });
+            } else if (exporters.size() == 1) {
+                selected = exporters.iterator().next();
+            } else {
+                throw new Error();
             }
+            packageToExporter.put(packageName, selected);
         });
 
         appArchives.removeAll(removals);
     }
 
-    private void updateRequires() {
-        if (!moduleSubstitutionNames.isEmpty()) {
-            appArchives.forEach(archive -> archive.updateRequires(moduleSubstitutionNames));
-        }
-    }
-
     private DelegatingArchive selectExporter(Set<DelegatingArchive> exporters) {
-        Optional<DelegatingArchive> selectedArchive = exporters.stream()
-                                                                     .filter(a -> !a.isAutomatic())
-                                                                     .findFirst();
-        if (selectedArchive.isEmpty()) {
-            final Map<String, DelegatingArchive> byModuleName = exporters.stream()
-                                                                         .collect(toMap(DelegatingArchive::moduleName,
-                                                                                        archive -> archive));
-            final Set<String> moduleNames = byModuleName.keySet();
-            Optional<String> selected = selectPreferredExporter("jakarta", moduleNames);
+        final Map<String, DelegatingArchive> byModuleName = exporters.stream()
+                                                                     .collect(toMap(DelegatingArchive::moduleName,
+                                                                                    archive -> archive));
+        final Set<String> moduleNames = byModuleName.keySet();
+        Optional<String> selected = selectPreferredExporter("jakarta", moduleNames);
+        if (selected.isEmpty()) {
+            selected = selectPreferredExporter("javax", moduleNames);
             if (selected.isEmpty()) {
-                selected = selectPreferredExporter("javax", moduleNames);
+                selected = selectPreferredExporter("java", moduleNames);
                 if (selected.isEmpty()) {
-                    selected = selectPreferredExporter("java", moduleNames);
+                    selected = exporters.stream()
+                                        .filter(a -> !a.isAutomatic())
+                                        .map(DelegatingArchive::moduleName)
+                                        .findFirst();
                     if (selected.isEmpty()) {
                         selected = Optional.of(moduleNames.iterator().next());
                     }
                 }
             }
-            selectedArchive = Optional.of(byModuleName.get(selected.get()));
         }
-        return selectedArchive.get();
+        return byModuleName.get(selected.get());
     }
 
     private Optional<String> selectPreferredExporter(String prefix, Set<String> moduleNames) {
@@ -387,6 +392,61 @@ public class HelidonPlugin implements Plugin {
                });
     }
 
+    private void addJavaExporters() {
+        allJavaArchives.values().forEach(archive -> {
+            archive.descriptor()
+                   .exports()
+                   .forEach(exports -> {
+                       packageToExporter.put(exports.source(), archive);
+                   });
+        });
+    }
+
+    private void updateRequires() {
+        appArchives.forEach(archive -> {
+            final Set<String> extraRequires = requiresForProvides(archive, moduleSubstitutionNames);
+            if (!moduleSubstitutionNames.isEmpty() || !extraRequires.isEmpty()) {
+                archive.updateRequires(moduleSubstitutionNames, extraRequires);
+            }
+        });
+    }
+
+    private Set<String> requiresForProvides(DelegatingArchive archive, Map<String, String> moduleSubstitutionNames) {
+        // TODO: HERE
+        // WARNING: Duplicate 'java.json' modules: selected jakarta.json-1.1.5.jar, ignoring [jakarta.json-api-1.1.5.jar, javax.json-api-1.1.2.jar]
+        // WARNING: Multiple modules export 'org.glassfish.json.api': selected 'org.glassfish.java.json', removing [java.json]
+        // TODO Module org.glassfish.java.json does not read a module that exports javax.json.spi  --> java.json
+
+        return archive.descriptor()
+                      .provides()
+                      .stream()
+                      .map(ModuleDescriptor.Provides::service)
+                      .map(service -> {
+                          final String packageName = packageName(service);
+                          final DelegatingArchive exporter = packageToExporter.get(packageName);
+                          if (exporter == null) {
+                              throw new IllegalStateException("no exporter found for " + packageName);
+                          }
+                          final String required = exporter.moduleName();
+                          final String substitute = moduleSubstitutionNames.get(required);
+                          return substitute == null ? required : substitute;
+                      })
+                      .collect(Collectors.toSet());
+
+    }
+
+    private static String packageName(String className) {
+        final int lastDot = className.lastIndexOf('.');
+        return lastDot > 0 ? className.substring(0, lastDot) : className;
+    }
+
+    private void collectJavaArchives() {
+        javaModules.values().forEach(ref -> {
+            final String moduleName = ref.descriptor().name();
+            final DelegatingArchive archive = toArchive(javaModules.get(moduleName));
+            allJavaArchives.put(moduleName, archive);
+        });
+    }
 
     private void collectRequiredJavaArchives() {
         final Set<String> added = new HashSet<>();
@@ -395,7 +455,7 @@ public class HelidonPlugin implements Plugin {
 
     private void addJavaArchive(String moduleName, Set<String> added) {
         if (!added.contains(moduleName)) {
-            final DelegatingArchive archive = toArchive(javaModules.get(moduleName));
+            final DelegatingArchive archive = allJavaArchives.get(moduleName);
             javaArchives.add(archive);
             added.add(moduleName);
             archive.javaModuleDependencies().forEach(name -> addJavaArchive(name, added));

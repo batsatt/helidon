@@ -76,7 +76,7 @@ public class AutomaticArchive extends DelegatingArchive {
         this.jdkDependencies = collectJdkDependencies();
         LOG.info("        JDK dependencies: %s", jdkDependencies);
         descriptor(createNonAutomaticDescriptor());
-        addAutomaticMarkerEntry();
+        addAutomaticMarkerEntry();  // TODO: required?
     }
 
     @Override
@@ -148,6 +148,21 @@ public class AutomaticArchive extends DelegatingArchive {
         "commons.lang", Set.of("org/apache/commons/lang/enum/")
     );
 
+    private void checkExcludedPackages(String moduleName) {
+        final Set<String> excludedPackagePaths = EXCLUDED_PACKAGES_BY_MODULE.get(moduleName);
+        if (excludedPackagePaths != null && !excludedPackagePaths.isEmpty()) {
+            entryFilter(entry -> {
+                for (String excludedPackage : excludedPackagePaths) {
+                    if (entry.name().startsWith(excludedPackage)) {
+                        LOG.warn("excluding illegal package '%s' from module '%s", entry.name(), moduleName);
+                        return false;
+                    }
+                }
+                return true;
+            });
+        }
+    }
+
     /**
      * Create a ModuleDescriptor from the automatic one that will be resolvable and can be stored in the image.
      * <p>
@@ -163,18 +178,7 @@ public class AutomaticArchive extends DelegatingArchive {
 
         // Setup excluded packages filter if needed
 
-        final Set<String> excludedPackagePaths = EXCLUDED_PACKAGES_BY_MODULE.get(moduleName);
-        if (excludedPackagePaths != null && !excludedPackagePaths.isEmpty()) {
-            entryFilter(entry -> {
-                for (String excludedPackage : excludedPackagePaths) {
-                    if (entry.name().startsWith(excludedPackage)) {
-                        LOG.warn("excluding illegal package '%s' from module '%s", entry.name(), moduleName);
-                        return false;
-                    }
-                }
-                return true;
-            });
-        }
+        checkExcludedPackages(moduleName);
 
         // Create a new open module descriptor from the existing one, without the automatic flag,
         // and export all packages.
