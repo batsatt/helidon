@@ -24,7 +24,6 @@ import java.util.Set;
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.emptySet;
 import static java.util.Collections.singleton;
-import static java.util.Collections.singletonList;
 
 /**
  * An instrumentation agent that provides a work-around for the fact that jlink does
@@ -50,20 +49,24 @@ public class Agent {
         Module helidonModule = findModule("helidon.jlink");
         Set<Module> exportTo = singleton(helidonModule);
         Map<String, Set<Module>> extraExports = Map.of("jdk.tools.jlink.plugin", exportTo,
-                                                       "jdk.tools.jlink.internal", exportTo);
+                                                       "jdk.tools.jlink.internal", exportTo,
+                                                       "jdk.tools.jlink.internal.plugins", exportTo);
         inst.redefineModule(jlinkModule, emptySet(), extraExports, emptyMap(), emptySet(), emptyMap());
 
-        // Modify the java.base module to export its jdk.internal.module package to our module
+        // Modify the java.base module to export its jdk.internal.module and asm packages to our module
 
         Module javaBaseModule = findModule("java.base");
-        extraExports = Map.of("jdk.internal.module", exportTo);
+        extraExports = Map.of("jdk.internal.module", exportTo,
+                              "jdk.internal.org.objectweb.asm", exportTo,
+                              "jdk.internal.org.objectweb.asm.commons", exportTo);
         inst.redefineModule(javaBaseModule, emptySet(), extraExports, emptyMap(), emptySet(), emptyMap());
 
-        // Modify our module so it provides our plug-in as a service
+        // Modify our module so it provides our plug-ins as services
 
         Class<?> pluginClass = loadClass(jlinkModule, "jdk.tools.jlink.plugin.Plugin");
         Class<?> helidonPluginClass = loadClass(helidonModule, "io.helidon.jlink.plugins.HelidonPlugin");
-        Map<Class<?>, List<Class<?>>> extraProvides = Map.of(pluginClass, singletonList(helidonPluginClass));
+        Class<?> bootPluginClass = loadClass(helidonModule, "io.helidon.jlink.plugins.BootModulesPlugin");
+        Map<Class<?>, List<Class<?>>> extraProvides = Map.of(pluginClass, List.of(helidonPluginClass, bootPluginClass));
         inst.redefineModule(helidonModule, emptySet(), emptyMap(), emptyMap(), emptySet(), extraProvides);
 
         System.out.println("END premain");

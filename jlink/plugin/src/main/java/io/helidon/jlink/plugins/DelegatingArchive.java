@@ -23,7 +23,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import io.helidon.jlink.logging.Log;
 
 import jdk.tools.jlink.internal.Archive;
 
@@ -31,6 +34,7 @@ import jdk.tools.jlink.internal.Archive;
  * An Archive wrapper base class.
  */
 public abstract class DelegatingArchive implements Archive, Comparable<DelegatingArchive> {
+    private static final Log LOG = Log.getLog("delegating-archive");
     private final Archive delegate;
     private final Set<String> javaModuleNames;
     private ModuleDescriptor descriptor;
@@ -136,10 +140,11 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
      */
     public abstract boolean isAutomatic();
 
-    void updateRequires(Map<String, String> substituteRequires) {
+    void updateRequires(Map<String, String> substituteRequires, Set<String> extraRequires) {
         final String moduleName = moduleName();
         final ModuleDescriptor current = descriptor();
-        if (needsUpdate(current.requires(), substituteRequires)) {
+        if (needsUpdate(current.requires(), substituteRequires) ||
+            needsUpdate(current.requires(), extraRequires)) {
 
             final ModuleDescriptor.Builder builder = ModuleDescriptor.newModule(moduleName, current.modifiers());
 
@@ -162,7 +167,7 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
                     builder.requires(r);
                 } else if (substitute.equals(moduleName)) {
                     // Drop it.
-                    System.out.println("Dropping requires " + name + " from " + moduleName);
+                    LOG.info("Dropping requires " + name + " from " + moduleName);
                 } else {
                     if (r.compiledVersion().isPresent()) {
                         builder.requires(r.modifiers(), substitute, r.compiledVersion().get());
@@ -171,6 +176,21 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
                     }
                 }
             });
+
+            final Set<String> existingRequires = current.requires()
+                                                        .stream()
+                                                        .map(ModuleDescriptor.Requires::name)
+                                                        .collect(Collectors.toSet());
+            extraRequires.forEach(extra -> {
+                if (!existingRequires.contains(extra)) {
+                    if (!extra.equals(moduleName)) {
+                        builder.requires(extra);
+                    } else {
+                        LOG.info("Dropping requires " + extra + " from " + moduleName);
+                    }
+                }
+            });
+
 
             current.exports().forEach(builder::exports);
             current.opens().forEach(builder::opens);
@@ -196,6 +216,15 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
     private static boolean needsUpdate(Set<ModuleDescriptor.Requires> requires, Map<String, String> substituteRequires) {
         for (ModuleDescriptor.Requires require : requires) {
             if (substituteRequires.containsKey(require.name())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean needsUpdate(Set<ModuleDescriptor.Requires> requires, Set<String> extraRequires) {
+        for (ModuleDescriptor.Requires require : requires) {
+            if (!extraRequires.contains(require.name())) {
                 return true;
             }
         }

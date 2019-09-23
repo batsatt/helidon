@@ -139,6 +139,11 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
         }
         addArgument("--" + HelidonPlugin.NAME + "=" + pluginArgs.toString());
 
+        // Swap our variant of SystemModulesPlugin for the default one
+
+        addArgument("--disable-plugin","system-modules");
+        addArgument("--boot-modules");
+
         addArgument("--output", imageDir);
         addArgument("--bind-services");
         addArgument("--no-header-files");
