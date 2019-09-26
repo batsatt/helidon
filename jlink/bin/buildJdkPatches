@@ -1,0 +1,65 @@
+#!/bin/bash
+
+main() {
+    init "$@"
+    buildModule "java.base"
+    println "Done."
+}
+
+buildModule() {
+    local moduleName="${1}"
+    compileModule ${moduleName}
+    createOverridesJar ${moduleName}
+}
+
+compileModule() {
+    local moduleName="${1}"
+    local srcDir="${sourcesDir}/${moduleName}"
+    local dstDir="${classesDir}/${moduleName}"
+
+    println "Compiling ${moduleName} to ${dstDir}"
+    ${javaHome}/bin/javac ${jvmArgs} -d "${dstDir}" $(find "${srcDir}" -name "*.java") || fail
+}
+
+createOverridesJar() {
+    local moduleName="${1}"
+    local file="${overridesDir}/${moduleName}.jar"
+    local srcDir="${classesDir}/${moduleName}"
+    println "Creating ${file}"
+    cd ${srcDir} || fail
+    jar cvfM ${file} . || fail
+}
+
+init() {
+    readonly scriptName=$(basename "${0}")
+    readonly binDir=$(dirname "${0}")
+    readonly rootDir=$(cd "${binDir}"/..; pwd)
+    readonly sourcesDir="${rootDir}/etc/jdk-sources"
+    readonly classesDir="${rootDir}/etc/jdk-classes"
+    readonly overridesDir="${rootDir}/etc/patches"
+    [[ ${JAVA_11_HOME} ]] && javaHome=${JAVA_11_HOME} || javaHome=${JAVA_HOME}
+
+    [[ -d ${overridesDir} ]] && rm -rf ${overridesDir}
+    [[ -d ${classesDir} ]] && rm -rf ${classesDir}
+    mkdir ${overridesDir}
+
+    appendVar jvmArgs --add-exports="java.base/jdk.internal.misc=ALL-UNNAMED"
+}
+
+appendVar() {
+    local var=${1}
+    local value=${2}
+    local sep=${3:- }
+    export ${var}="${!var:+${!var}${sep}}${value}"
+}
+
+println() {
+    printf "${1}\n" "${@:2}"
+}
+
+fail() {
+    println "${1}"
+    exit 1
+}
+
+main "$@"

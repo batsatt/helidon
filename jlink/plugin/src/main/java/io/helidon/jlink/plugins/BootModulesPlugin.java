@@ -83,6 +83,7 @@ import jdk.tools.jlink.plugin.ResourcePool;
 import jdk.tools.jlink.plugin.ResourcePoolBuilder;
 import jdk.tools.jlink.plugin.ResourcePoolEntry;
 
+import static io.helidon.jlink.plugins.AutomaticArchive.AUTOMATIC_MODULE_MARKER_PATH;
 import static jdk.internal.org.objectweb.asm.Opcodes.AASTORE;
 import static jdk.internal.org.objectweb.asm.Opcodes.ACC_FINAL;
 import static jdk.internal.org.objectweb.asm.Opcodes.ACC_PUBLIC;
@@ -219,7 +220,8 @@ public final class BootModulesPlugin implements Plugin {
             try {
                 byte[] content = data.contentBytes();
                 Set<String> packages = module.packages();
-                ModuleInfo moduleInfo = new ModuleInfo(content, packages);
+                boolean forceAutomatic = module.findEntry(AUTOMATIC_MODULE_MARKER_PATH).isPresent();
+                ModuleInfo moduleInfo = new ModuleInfo(content, packages, forceAutomatic);
 
                 // link-time validation
                 moduleInfo.validateNames();
@@ -361,11 +363,13 @@ public final class BootModulesPlugin implements Plugin {
         private final Attributes attrs;
         private final Set<String> packages;
         private final boolean addModulePackages;
+        private final boolean forceAutomatic;
         private ModuleDescriptor descriptor;  // may be different that the original one
 
-        ModuleInfo(byte[] bytes, Set<String> packages) throws IOException {
+        ModuleInfo(byte[] bytes, Set<String> packages, boolean forceAutomatic) throws IOException {
             this.bais = new ByteArrayInputStream(bytes);
             this.packages = packages;
+            this.forceAutomatic = forceAutomatic;
             this.attrs = jdk.internal.module.ModuleInfo.read(bais, null);
 
             // If ModulePackages attribute is present, the packages from this
@@ -380,6 +384,10 @@ public final class BootModulesPlugin implements Plugin {
             // add ModulePackages attribute if this module contains some packages
             // and ModulePackages is not present
             this.addModulePackages = packages.size() > 0 && !hasModulePackages();
+        }
+
+        boolean isForceAutomatic() {
+            return forceAutomatic;
         }
 
         String moduleName() {
@@ -760,6 +768,7 @@ public final class BootModulesPlugin implements Plugin {
                 ModuleInfo minfo = moduleInfos.get(index);
                 new ModuleDescriptorBuilder(minfo.descriptor(),
                                             minfo.packages(),
+                                            minfo.isForceAutomatic(),
                                             index).build();
             }
             mv.visitVarInsn(ALOAD, MD_VAR);
@@ -1074,15 +1083,17 @@ public final class BootModulesPlugin implements Plugin {
 
             final ModuleDescriptor md;
             final Set<String> packages;
+            final boolean forceAutomatic;
             final int index;
 
-            ModuleDescriptorBuilder(ModuleDescriptor md, Set<String> packages, int index) {
+            ModuleDescriptorBuilder(ModuleDescriptor md, Set<String> packages, boolean forceAutomatic, int index) {
                 if (md.isAutomatic()) {
                     // TODO: auto throw new InternalError("linking automatic module is not supported");
                 }
                 this.md = md;
                 this.packages = packages;
                 this.index = index;
+                this.forceAutomatic = forceAutomatic;
             }
 
             void build() {
@@ -1134,7 +1145,7 @@ public final class BootModulesPlugin implements Plugin {
                 if (md.modifiers().contains(ModuleDescriptor.Modifier.MANDATED)) {
                     setModuleBit("mandated", true);
                 }
-                if (md.isAutomatic()) {  // TODO: auto. This isn't supported by jdk.internal.module.Builder !
+                if (forceAutomatic) {  // TODO: auto. This is supported by our patched jdk.internal.module.Builder
                     setModuleBit("automatic", true);
                 }
             }
