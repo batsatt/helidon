@@ -65,7 +65,7 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
     private final String[] args;
     private final List<String> jlinkArgs;
     private Path jmodDir;
-    private Path jmodOverridesDir;
+    private Path patchesDir;
     private Path appModulePath;
     private Path imageDir;
     private StringBuilder pluginArgs;
@@ -97,8 +97,8 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
         for (int i = 0; i < args.length; i++) {
             final String arg = args[i];
             if (arg.startsWith("--")) {
-                if (arg.equalsIgnoreCase("--jmodOverridesDir")) {
-                    jmodOverridesDir = assertDir(Paths.get(argAt(++i)));
+                if (arg.equalsIgnoreCase("--patchesDir")) {
+                    patchesDir = assertDir(Paths.get(argAt(++i)));
                 } else if (arg.equalsIgnoreCase("--jmodDir")) {
                     jmodDir = assertDir(Paths.get(argAt(++i)));
                 } else if (arg.equalsIgnoreCase("--imageDir")) {
@@ -134,8 +134,8 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
 
         appendPluginArg(null, appModulePath);
         appendPluginArg(HelidonPlugin.JMOD_DIR_KEY, jmodDir);
-        if (jmodOverridesDir != null) {
-            appendPluginArg(HelidonPlugin.JMOD_OVERRIDES_DIR_KEY, jmodOverridesDir);
+        if (patchesDir != null) {
+            appendPluginArg(HelidonPlugin.PATCHES_DIR_KEY, patchesDir);
         }
         addArgument("--" + HelidonPlugin.NAME + "=" + pluginArgs.toString());
 

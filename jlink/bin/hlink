@@ -24,6 +24,7 @@ init() {
     readonly pluginDir="${rootDir}/plugin/target/classes"
     readonly mainModule="helidon.jlink"
     readonly mainClass="io.helidon.jlink.Main"
+    readonly patchesDir="${rootDir}/etc/patches"
 
     [[ ${JAVA_11_HOME} ]] && javaHome=${JAVA_11_HOME} || javaHome=${JAVA_HOME}
 
@@ -32,6 +33,8 @@ init() {
     assertExists ${pluginJar}
     pluginModule=${mainModule}
     pluginPath=${pluginJar}
+
+    [[ -d ${patchesDir} ]] && appendVar appArgs "--patchesDir ${patchesDir}"
 
     [[ -e hlink-image ]] && rm -rf "hlink-image"
 

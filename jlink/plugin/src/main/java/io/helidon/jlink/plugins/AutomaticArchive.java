@@ -76,7 +76,7 @@ public class AutomaticArchive extends DelegatingArchive {
         this.jdkDependencies = collectJdkDependencies();
         LOG.info("        JDK dependencies: %s", jdkDependencies);
         descriptor(createNonAutomaticDescriptor());
-        addAutomaticMarkerEntry();  // TODO: required?
+        addAutomaticMarkerEntry();  // Tell the BootModulesPlugin to treat this one as automatic
     }
 
     @Override

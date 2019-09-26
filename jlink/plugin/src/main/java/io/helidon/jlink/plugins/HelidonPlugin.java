@@ -60,7 +60,7 @@ import static jdk.tools.jlink.internal.Archive.Entry.EntryType.CLASS_OR_RESOURCE
 public class HelidonPlugin implements Plugin {
     public static final String NAME = "helidon";
     public static final String JMOD_DIR_KEY = "jmodDir";
-    public static final String JMOD_OVERRIDES_DIR_KEY = "jmodOverridesDir";
+    public static final String PATCHES_DIR_KEY = "patchesDir";
     private static final Log LOG = Log.getLog(NAME);
 
     private final List<DelegatingArchive> appArchives = new ArrayList<>();
@@ -70,11 +70,13 @@ public class HelidonPlugin implements Plugin {
     private final Map<String, DelegatingArchive> packageToExporter = new HashMap<>();
     private final Map<String, String> moduleSubstitutionNames = new HashMap<>();
     private Map<String, ModuleReference> javaModules;
+    private Path patchesDir;
     private Set<String> javaModuleNames;
     private Runtime.Version javaBaseVersion;
     private ModuleReference appModule;
     private Collection<ModuleReference> appLibModules;
     private Set<String> javaDependencies;
+    private Map<String, Archive.Entry> patchesByPath;
 
     /**
      * Constructor.
@@ -102,9 +104,9 @@ public class HelidonPlugin implements Plugin {
         final Path appModulePath = configPath(NAME, config);
         final Path appLibsDir = appModulePath.getParent().resolve("libs"); // Asserted valid in Main
         final Path jmodDir = configPath(JMOD_DIR_KEY, config);
-        final Path jmodOverridesDir = configPath(JMOD_OVERRIDES_DIR_KEY, config);
         final String appModuleName = getModuleName(appModulePath);
-        javaModules = javaModules(jmodDir, jmodOverridesDir);
+        patchesDir = configPath(PATCHES_DIR_KEY, config);
+        javaModules = toModulesMap(jmodDir, true);
         javaModuleNames = javaModules.keySet();
         javaBaseVersion = toRuntimeVersion(javaModules.get("java.base"));
         appModule = ModuleFinder.of(appModulePath).find(appModuleName).orElseThrow();
@@ -132,6 +134,7 @@ public class HelidonPlugin implements Plugin {
             sortArchives();
             LOG.info("Java Archives: %s", javaArchives);
             LOG.info(" App Archives: %s", appArchives);
+            collectPatchEntries();
             addEntries(out);
             return out.build();
         } catch (Exception e) {
@@ -152,34 +155,20 @@ public class HelidonPlugin implements Plugin {
         });
     }
 
-    private static void addEntries(String moduleName, List<Archive.Entry> entries, ResourcePoolBuilder pool) {
-        entries.forEach(e -> pool.add(new ArchivePoolEntry(moduleName, e)));
+    private void addEntries(String moduleName, List<Archive.Entry> entries, ResourcePoolBuilder pool) {
+        entries.forEach(e -> {
+            final String entryName = e.getResourcePoolEntryName();
+            final Archive.Entry patch = patchesByPath.get(entryName);
+            final Archive.Entry entry = patch == null ? e : patch;
+            pool.add(new ArchivePoolEntry(moduleName, entry));
+        });
     }
 
-    private Map<String, ModuleReference> javaModules(Path jmodDir, Path jmodOverridesDir) {
-        final Map<String, ModuleReference> modules = toModulesMap(jmodDir, true);
-        if (jmodOverridesDir == null) {
-            return modules;
-        } else {
-            final Map<String, ModuleReference> overrides = toModulesMap(jmodOverridesDir, true);
-            final Map<String, ModuleReference> merged = new HashMap<>();
-            modules.forEach((moduleName, module) -> {
-                final ModuleReference override = overrides.get(moduleName);
-                if (override == null) {
-                    merged.put(moduleName, module);
-                } else {
-                    final Runtime.Version overrideVersion = toRuntimeVersion(override);
-                    final Runtime.Version overriddenVersion = toRuntimeVersion(module);
-                    final int relation = overrideVersion.compareTo(overriddenVersion);
-                    if (relation != 0) {
-                        final String relationName = relation < 0 ? "older" : "newer";
-                        LOG.warn("Overriding %s:%s with %s version: %s", moduleName,
-                                 overriddenVersion, relationName, overrideVersion);
-                    }
-                    merged.put(moduleName, override);
-                }
-            });
-            return merged;
+    private void collectPatchEntries() {
+        if (patchesDir != null) {
+            final Patches patches = new Patches(patchesDir, javaBaseVersion);
+            patchesByPath = patches.entries()
+                                   .collect(toMap(Archive.Entry::getResourcePoolEntryName, e -> e));
         }
     }
 
