@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.lang.module.ModuleDescriptor;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -140,6 +141,7 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
      */
     public abstract boolean isAutomatic();
 
+    // TODO: move to ModuleDescriptors
     void updateRequires(Map<String, String> substituteRequires, Set<String> extraRequires) {
         final String moduleName = moduleName();
         final ModuleDescriptor current = descriptor();
@@ -181,16 +183,20 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
                                                         .stream()
                                                         .map(ModuleDescriptor.Requires::name)
                                                         .collect(Collectors.toSet());
+            final Set<String> allRequires = new HashSet<>(existingRequires);
+
             extraRequires.forEach(extra -> {
-                if (!existingRequires.contains(extra)) {
-                    if (!extra.equals(moduleName)) {
-                        builder.requires(extra);
+                final String substitute = substituteRequires.get(extra);
+                final String module = substitute == null ? extra : substitute;
+                if (!allRequires.contains(module)) {
+                    if (!module.equals(moduleName)) {
+                        builder.requires(module);
+                        allRequires.add(module);
                     } else {
-                        LOG.info("Dropping requires " + extra + " from " + moduleName);
+                        LOG.debug("Dropping requires " + module + " from " + moduleName);
                     }
                 }
             });
-
 
             current.exports().forEach(builder::exports);
             current.opens().forEach(builder::opens);
