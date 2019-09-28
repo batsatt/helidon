@@ -50,6 +50,7 @@ import jdk.tools.jlink.plugin.Plugin;
 import jdk.tools.jlink.plugin.ResourcePool;
 import jdk.tools.jlink.plugin.ResourcePoolBuilder;
 
+import static io.helidon.jlink.plugins.ModuleDescriptors.automaticModules;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static jdk.tools.jlink.internal.Archive.Entry.EntryType.CLASS_OR_RESOURCE;
@@ -393,7 +394,11 @@ public class HelidonPlugin implements Plugin {
 
     private void updateRequires() {
         appArchives.forEach(archive -> {
-            final Set<String> extraRequires = requiresForProvides(archive, moduleSubstitutionNames);
+            final Set<String> extraRequires = new HashSet<>(requiresForProvides(archive, moduleSubstitutionNames));
+            if (archive.isAutomatic() && archive.moduleName().equals(appModule.descriptor().name())) {
+                // This is our main module and it is automatic. Add all automatic modules as extra requires.
+                extraRequires.addAll(automaticModules());
+            }
             if (!moduleSubstitutionNames.isEmpty() || !extraRequires.isEmpty()) {
                 archive.updateRequires(moduleSubstitutionNames, extraRequires);
             }
@@ -401,11 +406,6 @@ public class HelidonPlugin implements Plugin {
     }
 
     private Set<String> requiresForProvides(DelegatingArchive archive, Map<String, String> moduleSubstitutionNames) {
-        // TODO: HERE
-        // WARNING: Duplicate 'java.json' modules: selected jakarta.json-1.1.5.jar, ignoring [jakarta.json-api-1.1.5.jar, javax.json-api-1.1.2.jar]
-        // WARNING: Multiple modules export 'org.glassfish.json.api': selected 'org.glassfish.java.json', removing [java.json]
-        // TODO Module org.glassfish.java.json does not read a module that exports javax.json.spi  --> java.json
-
         return archive.descriptor()
                       .provides()
                       .stream()

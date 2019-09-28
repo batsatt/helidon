@@ -23,6 +23,7 @@ import java.io.UncheckedIOException;
 import java.lang.module.ModuleDescriptor;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -30,21 +31,18 @@ import java.util.Set;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 import java.util.spi.ToolProvider;
-import java.util.stream.Collectors;
 
 import io.helidon.jlink.logging.Log;
 
 import jdk.tools.jlink.internal.Archive;
 
+import static io.helidon.jlink.plugins.ModuleDescriptors.updateAutomaticDescriptor;
 import static jdk.tools.jlink.internal.Archive.Entry.EntryType.CLASS_OR_RESOURCE;
 
 /**
  * An archive representing an automatic module.
  */
 public class AutomaticArchive extends DelegatingArchive {
-    public static final String AUTOMATIC_MODULE_MARKER_PATH = "META-INF/an.automatic.module";
-    private static final byte[] AUTOMATIC_MODULE_MARKER_CONTENT = new byte[0];
-
     private static final Log LOG = Log.getLog("automatic-archive");
     private static final ToolProvider JDEPS = ToolProvider.findFirst("jdeps").orElseThrow();
     private final Runtime.Version version;
@@ -52,6 +50,7 @@ public class AutomaticArchive extends DelegatingArchive {
     private final boolean isMultiRelease;
     private final String releaseFeatureVersion;
     private final Set<String> jdkDependencies;
+    private final Set<String> dependencies;
 
     /**
      * Constructor.
@@ -72,11 +71,19 @@ public class AutomaticArchive extends DelegatingArchive {
         this.manifest = manifest();
         this.isMultiRelease = "true".equalsIgnoreCase(mainAttribute(Attributes.Name.MULTI_RELEASE));
         this.releaseFeatureVersion = Integer.toString(jdkVersion.feature());
+        this.jdkDependencies = new HashSet<>();
+        this.dependencies = new HashSet<>();
+        collectDependencies();
         LOG.info("   Multi release version: %s", isMultiRelease ? releaseFeatureVersion : "none");
-        this.jdkDependencies = collectJdkDependencies();
         LOG.info("        JDK dependencies: %s", jdkDependencies);
-        descriptor(createNonAutomaticDescriptor());
-        addAutomaticMarkerEntry();  // Tell the BootModulesPlugin to treat this one as automatic
+
+        // Update the descriptor to export all packages and require all dependencies
+
+        descriptor(updateAutomaticDescriptor(descriptor, dependencies));
+
+        // Setup excluded packages filter if needed
+
+        checkExcludedPackages(descriptor.name());
     }
 
     @Override
@@ -116,7 +123,7 @@ public class AutomaticArchive extends DelegatingArchive {
         }
     }
 
-    private Set<String> collectJdkDependencies() {
+    private void collectDependencies() {
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
         final List<String> args = new ArrayList<>();
 
@@ -133,11 +140,20 @@ public class AutomaticArchive extends DelegatingArchive {
         }
 
         final Set<String> jdkModules = javaModuleNames();
-        return Arrays.stream(out.toString().split("\\n"))
-                     .map(String::trim)
-                     .filter(s -> !s.isEmpty())
-                     .filter(jdkModules::contains)
-                     .collect(Collectors.toSet());
+        Arrays.stream(out.toString().split("\\n"))
+              .map(String::trim)
+              .filter(s -> !s.isEmpty())
+              .filter(s -> !s.contains(" "))
+              .forEach(name -> {
+                  final int slash = name.indexOf('/');
+                  if (slash > 0) {
+                      name = name.substring(0, slash);
+                  }
+                  dependencies.add(name);
+                  if (jdkModules.contains(name)) {
+                      jdkDependencies.add(name);
+                  }
+              });
     }
 
     // TODO: Automatic modules just ignore illegal names (e.g. won't list "org.apache.commons.lang.enum" as a package) when
@@ -161,47 +177,5 @@ public class AutomaticArchive extends DelegatingArchive {
                 return true;
             });
         }
-    }
-
-    /**
-     * Create a ModuleDescriptor from the automatic one that will be resolvable and can be stored in the image.
-     * <p>
-     * Making this work correctly at runtime may require some modification of the module system (e.g. ModuleInfo),
-     * which can be accomplished by overriding java.base classes in the plugin. Such a modification will likely need to
-     * convert the descriptor loaded at runtime back to an automatic module.
-     *
-     * @return The descriptor.
-     */
-    private ModuleDescriptor createNonAutomaticDescriptor() {
-        final ModuleDescriptor existing = super.descriptor();
-        final String moduleName = existing.name();
-
-        // Setup excluded packages filter if needed
-
-        checkExcludedPackages(moduleName);
-
-        // Create a new open module descriptor from the existing one, without the automatic flag,
-        // and export all packages.
-
-        final ModuleDescriptor.Builder builder = ModuleDescriptor.newOpenModule(moduleName);
-        if (existing.version().isPresent()) {
-            builder.version(existing.version().get());
-        }
-
-        final Set<String> packages = existing.packages();
-        builder.packages(packages);
-        packages.forEach(builder::exports);
-
-        existing.provides().forEach(builder::provides);
-
-        if (existing.mainClass().isPresent()) {
-            builder.mainClass(existing.mainClass().get());
-        }
-
-        return builder.build();
-    }
-
-    private void addAutomaticMarkerEntry() {
-        addEntry(new ByteArrayArchiveEntry(this, AUTOMATIC_MODULE_MARKER_PATH, AUTOMATIC_MODULE_MARKER_CONTENT));
     }
 }
