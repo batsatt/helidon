@@ -50,7 +50,6 @@ import jdk.tools.jlink.plugin.Plugin;
 import jdk.tools.jlink.plugin.ResourcePool;
 import jdk.tools.jlink.plugin.ResourcePoolBuilder;
 
-import static io.helidon.jlink.plugins.ModuleDescriptors.automaticModules;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static jdk.tools.jlink.internal.Archive.Entry.EntryType.CLASS_OR_RESOURCE;
@@ -396,8 +395,10 @@ public class HelidonPlugin implements Plugin {
         appArchives.forEach(archive -> {
             final Set<String> extraRequires = new HashSet<>(requiresForProvides(archive, moduleSubstitutionNames));
             if (archive.isAutomatic() && archive.moduleName().equals(appModule.descriptor().name())) {
-                // This is our main module and it is automatic. Add all automatic modules as extra requires.
-                extraRequires.addAll(automaticModules());
+                // This is our main module and it is automatic. Add *all* app archives as extra requires.
+                appArchives.stream()
+                           .map(DelegatingArchive::moduleName)
+                           .forEach(extraRequires::add);
             }
             if (!moduleSubstitutionNames.isEmpty() || !extraRequires.isEmpty()) {
                 archive.updateRequires(moduleSubstitutionNames, extraRequires);
