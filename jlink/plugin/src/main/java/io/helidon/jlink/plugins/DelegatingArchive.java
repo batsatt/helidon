@@ -225,67 +225,8 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
 
     // TODO: move to ModuleDescriptors
     void updateRequires(Map<String, String> substituteRequires, Set<String> extraRequires) {
-        final String moduleName = moduleName();
-        final ModuleDescriptor current = descriptor();
-        if (needsUpdate(current.requires(), substituteRequires) ||
-            needsUpdate(current.requires(), extraRequires)) {
-
-            final ModuleDescriptor.Builder builder = ModuleDescriptor.newModule(moduleName, current.modifiers());
-
-            if (current.mainClass().isPresent()) {
-                builder.mainClass(current.mainClass().get());
-            }
-
-            current.provides().forEach(builder::provides);
-
-            builder.packages(current.packages());
-
-            if (current.version().isPresent()) {
-                builder.version(current.version().get());
-            }
-
-            current.requires().forEach(r -> {
-                final String name = r.name();
-                final String substitute = substituteRequires.get(name);
-                if (substitute == null) {
-                    builder.requires(r);
-                } else if (substitute.equals(moduleName)) {
-                    // Drop it.
-                    LOG.info("Dropping requires " + name + " from " + moduleName);
-                } else {
-                    if (r.compiledVersion().isPresent()) {
-                        builder.requires(r.modifiers(), substitute, r.compiledVersion().get());
-                    } else {
-                        builder.requires(r.modifiers(), substitute);
-                    }
-                }
-            });
-
-            final Set<String> existingRequires = current.requires()
-                                                        .stream()
-                                                        .map(ModuleDescriptor.Requires::name)
-                                                        .collect(Collectors.toSet());
-            final Set<String> allRequires = new HashSet<>(existingRequires);
-
-            extraRequires.forEach(extra -> {
-                final String substitute = substituteRequires.get(extra);
-                final String module = substitute == null ? extra : substitute;
-                if (!allRequires.contains(module)) {
-                    if (!module.equals(moduleName)) {
-                        builder.requires(module);
-                        allRequires.add(module);
-                    } else {
-                        LOG.debug("Dropping requires " + module + " from " + moduleName);
-                    }
-                }
-            });
-
-            current.exports().forEach(builder::exports);
-            current.opens().forEach(builder::opens);
-            current.uses().forEach(builder::uses);
-
-            descriptor(builder.build());
-        }
+        final ModuleDescriptor updated = ModuleDescriptors.updateRequires(descriptor(), substituteRequires, extraRequires);
+        descriptor(updated);
     }
 
     protected void descriptor(ModuleDescriptor descriptor) {
@@ -301,21 +242,4 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
         extraEntries.put(entry.name(), entry);
     }
 
-    private static boolean needsUpdate(Set<ModuleDescriptor.Requires> requires, Map<String, String> substituteRequires) {
-        for (ModuleDescriptor.Requires require : requires) {
-            if (substituteRequires.containsKey(require.name())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean needsUpdate(Set<ModuleDescriptor.Requires> requires, Set<String> extraRequires) {
-        for (ModuleDescriptor.Requires require : requires) {
-            if (!extraRequires.contains(require.name())) {
-                return true;
-            }
-        }
-        return false;
-    }
 }
