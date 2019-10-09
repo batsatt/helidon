@@ -31,14 +31,21 @@ import io.helidon.jlink.logging.Log;
 
 import jdk.tools.jlink.internal.Archive;
 
+import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toMap;
+
 /**
  * An Archive wrapper base class.
  */
 public abstract class DelegatingArchive implements Archive, Comparable<DelegatingArchive> {
     private static final Log LOG = Log.getLog("delegating-archive");
     private final Archive delegate;
-    private final Set<String> javaModuleNames;
+    private final Set<String> allJdkModules;
+    private final Set<String> jdkDependencies;
+    private final Set<String> dependencies;
+
     private ModuleDescriptor descriptor;
+    private final Runtime.Version version;
     private final Map<String, Entry> extraEntries = new HashMap<>();
     private Predicate<Entry> entryFilter = entry -> true;
 
@@ -47,13 +54,55 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
      *
      * @param delegate The delegate.
      * @param descriptor The descriptor.
-     * @param javaModuleNames The names of all Java modules.
+     * @param version The version.
+     * @param allJdkModules The names of all JDK modules.
      */
-    DelegatingArchive(Archive delegate, ModuleDescriptor descriptor, Set<String> javaModuleNames) {
+    DelegatingArchive(Archive delegate, ModuleDescriptor descriptor, Runtime.Version version, Set<String> allJdkModules) {
         this.delegate = delegate;
         this.descriptor = descriptor;
-        this.javaModuleNames = javaModuleNames;
+        this.version = version;
+        this.allJdkModules = allJdkModules;
+        this.dependencies = new HashSet<>();
+        this.jdkDependencies = new HashSet<>();
     }
+
+    final void prepare(Map<String, DelegatingArchive> appArchivesByExport) {
+
+        // Create a copy of the map without any references to this archive
+
+        final Map<String, DelegatingArchive> reduced = appArchivesByExport.entrySet()
+                                                                          .stream()
+                                                                          .filter(e -> !e.getValue().equals(this))
+                                                                          .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+        // Collect dependencies
+
+        LOG.info("Collecting dependencies of %s", this);
+
+        this.dependencies.addAll(collectDependencies(reduced));
+
+        // Collect the subset of jdk dependencies
+
+        this.jdkDependencies.addAll(dependencies.stream()
+                                                .filter(allJdkModules::contains)
+                                                .collect(Collectors.toSet()));
+        LOG.info("    Non-JDK dependencies: %s", dependencies.stream()
+                                                             .filter(s -> !jdkDependencies.contains(s))
+                                                             .sorted()
+                                                             .collect(toList()));
+        LOG.info("        JDK dependencies: %s", jdkDependencies.stream().sorted().collect(toList()));
+
+        // Update the descriptor if needed
+
+        final ModuleDescriptor newDescriptor = updateDescriptor(descriptor);
+        if (newDescriptor != descriptor) {
+            descriptor(newDescriptor);
+        }
+    }
+
+    protected abstract Set<String> collectDependencies(Map<String, DelegatingArchive> appArchivesByExport);
+
+    protected abstract ModuleDescriptor updateDescriptor(ModuleDescriptor descriptor);
+
 
     @Override
     public int compareTo(DelegatingArchive o) {
@@ -68,7 +117,16 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
 
     @Override
     public String toString() {
-        return moduleName();
+        final StringBuilder sb = new StringBuilder();
+        if (isAutomatic()) {
+            sb.append("automatic ");
+        }
+        if (isOpen()) {
+            sb.append("open ");
+        }
+        sb.append("module '").append(moduleName()).append('@').append(version()).append("'");
+        sb.append(" at ").append(getPath());
+        return sb.toString();
     }
 
     /**
@@ -78,6 +136,19 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
      */
     public ModuleDescriptor descriptor() {
         return descriptor;
+    }
+
+    /**
+     * Returns the version.
+     *
+     * @return The version.
+     */
+    public Runtime.Version version() {
+        return version;
+    }
+
+    public Set<String> dependencies() {
+        return dependencies;
     }
 
     @Override
@@ -123,8 +194,8 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
      *
      * @return The names.
      */
-    Set<String> javaModuleNames() {
-        return javaModuleNames;
+    Set<String> allJdkModules() {
+        return allJdkModules;
     }
 
     /**
@@ -132,7 +203,9 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
      *
      * @return The set.
      */
-    public abstract Set<String> javaModuleDependencies();
+    public Set<String> jdkDependencies() {
+        return jdkDependencies;
+    }
 
     /**
      * Returns whether or not this is an automatic module.
@@ -140,6 +213,15 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
      * @return {@code true} if automatic.
      */
     public abstract boolean isAutomatic();
+
+    /**
+     * Returns whether or not this is an open module.
+     *
+     * @return {@code true} if open.
+     */
+    public boolean isOpen() {
+        return descriptor.isOpen();
+    }
 
     // TODO: move to ModuleDescriptors
     void updateRequires(Map<String, String> substituteRequires, Set<String> extraRequires) {

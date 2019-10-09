@@ -52,6 +52,7 @@ import jdk.tools.jlink.plugin.ResourcePoolBuilder;
 
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toSet;
 import static jdk.tools.jlink.internal.Archive.Entry.EntryType.CLASS_OR_RESOURCE;
 
 /**
@@ -122,12 +123,15 @@ public class HelidonPlugin implements Plugin {
             LOG.info("Collecting application archives");
             collectAppArchives();
             removeDuplicateExporters();
+            LOG.info("Preparing application archives");
+            appArchives.forEach(archive -> archive.prepare(packageToExporter));
+
             collectJavaArchives();
             addJavaExporters();
             updateRequires();
             javaDependencies = appArchives.stream()
-                                          .flatMap(a -> a.javaModuleDependencies().stream())
-                                          .collect(Collectors.toSet());
+                                          .flatMap(a -> a.jdkDependencies().stream())
+                                          .collect(toSet());
             LOG.info("Required Java modules: %s", javaDependencies);
             LOG.info("Collecting required Java archives");
             collectRequiredJavaArchives();
@@ -208,7 +212,7 @@ public class HelidonPlugin implements Plugin {
         return modules.values()
                       .stream()
                       .map(HelidonPlugin::select)
-                      .collect(Collectors.toSet());
+                      .collect(toSet());
     }
 
     // TODO: This is going pretty far, but for now...
@@ -308,6 +312,21 @@ public class HelidonPlugin implements Plugin {
         appLibModules.forEach(module -> appArchives.add(toArchive(module)));
     }
 
+    /* TODO Remove
+       private void collectJakartaSubstitutions() {
+           final Map<String, DelegatingArchive> byName = appArchives.stream().collect(toMap(DelegatingArchive::moduleName, a -> a));
+           byName.keySet().forEach(name -> {
+               if (name.startsWith(JAKARTA_PREFIX)) {
+                   final String javaxName = JAVAX_PREFIX + name.substring(JAKARTA_PREFIX.length());
+                   final DelegatingArchive javaxArchive = byName.get(javaxName);
+                   if (javaxArchive != null) {
+                       LOG.info("Found duplicate %s and %s", javaxArchive, name);
+                       jakartaSubstitutionNames.put(javaxName, name);
+                   }
+               }
+           });
+       }
+   */
     private void removeDuplicateExporters() {
 
         // Collect archives by exporting package
@@ -372,13 +391,13 @@ public class HelidonPlugin implements Plugin {
     }
 
     private void addPackageExporter(DelegatingArchive archive, Map<String, Set<DelegatingArchive>> packageToExporters) {
-        archive.descriptor()
-               .exports()
-               .stream()
-               .map(ModuleDescriptor.Exports::source)
-               .forEach(pkg -> {
-                   packageToExporters.computeIfAbsent(pkg, p -> new HashSet<>()).add(archive);
-               });
+        final ModuleDescriptor descriptor = archive.descriptor();
+        final boolean auto = descriptor.isAutomatic();
+        final Stream<String> stream = auto ? descriptor.packages().stream()
+                                           : descriptor.exports().stream().map(ModuleDescriptor.Exports::source);
+        stream.forEach(pkg -> {
+            packageToExporters.computeIfAbsent(pkg, p -> new HashSet<>()).add(archive);
+        });
     }
 
     private void addJavaExporters() {
@@ -421,7 +440,7 @@ public class HelidonPlugin implements Plugin {
                           final String substitute = moduleSubstitutionNames.get(required);
                           return substitute == null ? required : substitute;
                       })
-                      .collect(Collectors.toSet());
+                      .collect(toSet());
 
     }
 
@@ -440,7 +459,32 @@ public class HelidonPlugin implements Plugin {
 
     private void collectRequiredJavaArchives() {
         final Set<String> added = new HashSet<>();
+
+        // Collect the app's java dependencies
+
         javaDependencies.forEach(moduleName -> addJavaArchive(moduleName, added));
+
+        // Now add all of the dependencies of the app's java dependencies
+
+        final List<DelegatingArchive> jdkDependencies = new ArrayList<>();
+        javaArchives.forEach(archive -> {
+            archive.descriptor()
+                   .requires()
+                   .stream()
+                   .map(ModuleDescriptor.Requires::name)
+                   .forEach(required -> {
+                       final DelegatingArchive javaArchive = allJavaArchives.get(required);
+                       if (javaArchive == null) {
+                           LOG.warn("Could not find required java module %s, required by %s",
+                                    required, archive.moduleName());
+                           // TODO: should these be added as static requires?
+                       } else if (!added.contains(javaArchive.moduleName())){
+                           jdkDependencies.add(javaArchive);
+                           added.add(javaArchive.moduleName());
+                       }
+                   });
+        });
+        javaArchives.addAll(jdkDependencies);
     }
 
     private void addJavaArchive(String moduleName, Set<String> added) {
@@ -448,7 +492,7 @@ public class HelidonPlugin implements Plugin {
             final DelegatingArchive archive = allJavaArchives.get(moduleName);
             javaArchives.add(archive);
             added.add(moduleName);
-            archive.javaModuleDependencies().forEach(name -> addJavaArchive(name, added));
+            archive.jdkDependencies().forEach(name -> addJavaArchive(name, added));
         }
     }
 
@@ -467,7 +511,7 @@ public class HelidonPlugin implements Plugin {
         final String fileName = modulePath.getFileName().toString();
         final Runtime.Version version = versionOf(descriptor);
 
-        LOG.info("Processing %smodule '%s:%s' at %s", automatic ? "automatic " : "", moduleName, version, modulePath);
+        LOG.info("Opening %smodule '%s@%s' at %s", automatic ? "automatic " : "", moduleName, version, modulePath);
 
         Archive archive;
         if (Files.isDirectory(modulePath)) {
@@ -479,8 +523,8 @@ public class HelidonPlugin implements Plugin {
         } else {
             throw illegalArg("Unsupported module type: " + modulePath);
         }
-        return automatic ? new AutomaticArchive(archive, descriptor, javaModuleNames, version, javaBaseVersion)
-                         : new ModuleArchive(archive, descriptor, javaModuleNames);
+        return automatic ? new AutomaticArchive(archive, descriptor, version, javaModuleNames, javaBaseVersion)
+                         : new ModuleArchive(archive, descriptor, version, javaModuleNames);
     }
 
     private Runtime.Version versionOf(ModuleDescriptor descriptor) {

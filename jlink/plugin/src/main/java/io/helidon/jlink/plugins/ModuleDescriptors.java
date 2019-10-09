@@ -53,11 +53,14 @@ class ModuleDescriptors {
      *
      * @param descriptor The descriptor.
      * @param extraRequires Extra required modules.
+     * @param version The version. May be {@code null}.
      * @return The original or updated descriptor.
      */
-    static ModuleDescriptor updateAutomaticDescriptor(ModuleDescriptor descriptor, Set<String> extraRequires) {
+    static ModuleDescriptor updateAutomaticDescriptor(ModuleDescriptor descriptor,
+                                                      Set<String> extraRequires,
+                                                      Runtime.Version version) {
         if (descriptor.isAutomatic()) {
-            final ModuleDescriptor result = addExportsAndRequires(descriptor, extraRequires);
+            final ModuleDescriptor result = update(descriptor, extraRequires, version);
             AUTOMATIC_MODULES.add(descriptor.name());
             return result;
         } else {
@@ -101,20 +104,25 @@ class ModuleDescriptors {
     }
 
     /**
-     * Exports all packages and add extra requires. Since automatic modules cannot export packages,
+     * Exports all packages and add extra requires and version if present. Since automatic modules cannot export packages,
      * convert it to an open module.
      *
      * @param descriptor The descriptor.
      * @param extraRequires The extra required modules.
+     * @param version The version. May be {@code null}.
      * @return The updated descriptor.
      */
-    private static ModuleDescriptor addExportsAndRequires(ModuleDescriptor descriptor, Set<String> extraRequires) {
+    private static ModuleDescriptor update(ModuleDescriptor descriptor,
+                                           Set<String> extraRequires,
+                                           Runtime.Version version) {
 
         // Create a new open module descriptor from the existing one and export all packages.
 
         final ModuleDescriptor.Builder builder = ModuleDescriptor.newOpenModule(descriptor.name());
         if (descriptor.version().isPresent()) {
             builder.version(descriptor.version().get());
+        } else {
+            builder.version(version.toString());
         }
 
         final Set<String> packages = descriptor.packages();
