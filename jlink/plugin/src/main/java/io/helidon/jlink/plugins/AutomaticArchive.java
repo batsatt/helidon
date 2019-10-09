@@ -94,7 +94,6 @@ public class AutomaticArchive extends DelegatingArchive {
 
     @Override
     protected Set<String> collectDependencies(Map<String, DelegatingArchive> appArchivesByExport) {
-        final String moduleName = delegate().moduleName();
         final Path modulePath = delegate().getPath();
         final String jarName = modulePath.getFileName().toString();
 
