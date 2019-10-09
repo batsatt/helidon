@@ -29,6 +29,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.lang.module.Configuration;
 import java.lang.module.ModuleDescriptor;
 import java.lang.module.ModuleDescriptor.Exports;
@@ -41,6 +42,10 @@ import java.lang.module.ModuleReader;
 import java.lang.module.ModuleReference;
 import java.lang.module.ResolvedModule;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -120,6 +125,9 @@ import static jdk.internal.org.objectweb.asm.Opcodes.T_BYTE;
  *
  * <em>NOTE:</em> This is a copy of the JDK SystemModulesPlugin class that has been
  * modified to support automatic modules.
+ *
+ * TODO: update to latest? Still sorts classNames/moduleNames in genSystemModulesMapClass(), file a bug
+ * https://github.com/openjdk/jdk/blob/45628a358a8631f81cd592fd66faf936a213459e/src/jdk.jlink/share/classes/jdk/tools/jlink/internal/plugins/SystemModulesPlugin.java
  */
 
 public final class BootModulesPlugin implements Plugin {
@@ -350,10 +358,24 @@ public final class BootModulesPlugin implements Plugin {
         SystemModulesClassGenerator generator
             = new SystemModulesClassGenerator(className, moduleInfos);
         byte[] bytes = generator.getClassWriter(cf).toByteArray();
+        storeClass(className, bytes);
         String rn = "/java.base/" + className + ".class";
         ResourcePoolEntry e = ResourcePoolEntry.create(rn, bytes);
         out.add(e);
         return rn;
+    }
+
+    static void storeClass(String className, byte[] classData) {
+        final Path path = Paths.get("classes/" + className + ".class").toAbsolutePath();
+        System.out.println("Storing " + path);
+        try {
+            final Path parent = path.getParent();
+            Files.createDirectories(parent);
+            Files.write(path, classData, StandardOpenOption.CREATE,
+                        StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     static class ModuleInfo {
@@ -1825,7 +1847,7 @@ public final class BootModulesPlugin implements Plugin {
         mv.visitTypeInsn(ANEWARRAY, "java/lang/String");
 
         int index = 0;
-        for (String moduleName : sorted(map.keySet())) {
+        for (String moduleName : /*sorted(*/map.keySet()/*)*/) {   // TODO: sorting is a bug, needs to retain order
             mv.visitInsn(DUP);                  // arrayref
             pushInt(mv, index);
             mv.visitLdcInsn(moduleName);
@@ -1848,7 +1870,7 @@ public final class BootModulesPlugin implements Plugin {
         mv.visitTypeInsn(ANEWARRAY, "java/lang/String");
 
         index = 0;
-        for (String className : sorted(map.values())) {
+        for (String className : /*sorted(*/map.values()/*)*/) {   // TODO: sorting is a bug, needs to retain order
             mv.visitInsn(DUP);                  // arrayref
             pushInt(mv, index);
             mv.visitLdcInsn(className.replace('/', '.'));
@@ -1862,7 +1884,9 @@ public final class BootModulesPlugin implements Plugin {
 
         // write the class file to the pool as a resource
         String rn = "/java.base/" + SYSTEM_MODULES_MAP_CLASS + ".class";
-        ResourcePoolEntry e = ResourcePoolEntry.create(rn, cw.toByteArray());
+        byte[] data = cw.toByteArray();
+        storeClass(SYSTEM_MODULES_MAP_CLASS, data);
+        ResourcePoolEntry e = ResourcePoolEntry.create(rn, data);
         out.add(e);
 
         return rn;

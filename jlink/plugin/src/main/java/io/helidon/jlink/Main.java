@@ -91,6 +91,7 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
             System.err,
             jlinkArgs.toArray(new String[0])
         );
+        System.out.println("Done.");
     }
 
     private void parse() {

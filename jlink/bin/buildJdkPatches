@@ -44,6 +44,9 @@ init() {
     mkdir ${overridesDir}
 
     appendVar jvmArgs --add-exports="java.base/jdk.internal.misc=ALL-UNNAMED"
+    appendVar jvmArgs --add-exports="java.base/jdk.internal.loader=ALL-UNNAMED"
+    appendVar jvmArgs --add-exports="java.base/jdk.internal.perf=ALL-UNNAMED"
+    #appendVar jvmArgs --add-exports="java.base/jdk.internal.module=ALL-UNNAMED"
 }
 
 appendVar() {

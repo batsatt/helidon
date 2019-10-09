@@ -17,10 +17,9 @@
 package io.helidon.jlink.plugins;
 
 import java.lang.module.ModuleDescriptor;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-import io.helidon.jlink.logging.Log;
 
 import jdk.tools.jlink.internal.Archive;
 
@@ -28,24 +27,16 @@ import jdk.tools.jlink.internal.Archive;
  * An archive representing a non-automatic module.
  */
 public class ModuleArchive extends DelegatingArchive {
-    private static final Log LOG = Log.getLog("module-archive");
-    private final Set<String> jdkDependencies;
 
     /**
      * Constructor.
      *
      * @param delegate The delegate.
-     * @param javaModuleNames The names of all Java modules.
+     * @param version The version.
+     * @param allJdkModules The names of all JDK modules.
      */
-    public ModuleArchive(Archive delegate, ModuleDescriptor descriptor, Set<String> javaModuleNames) {
-        super(delegate, descriptor, javaModuleNames);
-        this.jdkDependencies = collectJdkDependencies();
-        LOG.info("        JDK dependencies: %s", jdkDependencies);
-    }
-
-    @Override
-    public Set<String> javaModuleDependencies() {
-        return jdkDependencies;
+    ModuleArchive(Archive delegate, ModuleDescriptor descriptor, Runtime.Version version, Set<String> allJdkModules) {
+        super(delegate, descriptor, version, allJdkModules);
     }
 
     @Override
@@ -53,13 +44,16 @@ public class ModuleArchive extends DelegatingArchive {
         return false;
     }
 
-    private Set<String> collectJdkDependencies() {
-        final Set<String> jdkModules = javaModuleNames();
-        final ModuleDescriptor descriptor = descriptor();
-        return descriptor.requires()
-                         .stream()
-                         .filter(r -> jdkModules.contains(r.name()))
-                         .map(ModuleDescriptor.Requires::name)
-                         .collect(Collectors.toSet());
+    @Override
+    protected Set<String> collectDependencies(Map<String, DelegatingArchive> appArchivesByExport) {
+        return descriptor().requires()
+                           .stream()
+                           .map(ModuleDescriptor.Requires::name)
+                           .collect(Collectors.toSet());
+    }
+
+    @Override
+    protected ModuleDescriptor updateDescriptor(ModuleDescriptor descriptor) {
+        return descriptor;
     }
 }
