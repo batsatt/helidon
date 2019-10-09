@@ -23,10 +23,13 @@ import java.util.stream.Collectors;
 
 import jdk.tools.jlink.internal.Archive;
 
+import static io.helidon.jlink.plugins.ModuleDescriptors.convertToOpen;
+
 /**
- * An archive representing a non-automatic module.
+ * An archive representing a non-automatic but open module. If the underlying module is not open,
+ * the descriptor will be re-written to make it so.
  */
-public class ModuleArchive extends DelegatingArchive {
+public class OpenModuleArchive extends DelegatingArchive {
 
     /**
      * Constructor.
@@ -35,7 +38,7 @@ public class ModuleArchive extends DelegatingArchive {
      * @param version The version.
      * @param allJdkModules The names of all JDK modules.
      */
-    ModuleArchive(Archive delegate, ModuleDescriptor descriptor, Runtime.Version version, Set<String> allJdkModules) {
+    OpenModuleArchive(Archive delegate, ModuleDescriptor descriptor, Runtime.Version version, Set<String> allJdkModules) {
         super(delegate, descriptor, version, allJdkModules);
     }
 
@@ -54,6 +57,10 @@ public class ModuleArchive extends DelegatingArchive {
 
     @Override
     protected ModuleDescriptor updateDescriptor(ModuleDescriptor descriptor) {
-        return descriptor;
+        if (descriptor.isOpen()) {
+            return descriptor;
+        } else {
+            return convertToOpen(descriptor);
+        }
     }
 }

@@ -524,7 +524,7 @@ public class HelidonPlugin implements Plugin {
             throw illegalArg("Unsupported module type: " + modulePath);
         }
         return automatic ? new AutomaticArchive(archive, descriptor, version, javaModuleNames, javaBaseVersion)
-                         : new ModuleArchive(archive, descriptor, version, javaModuleNames);
+                         : new OpenModuleArchive(archive, descriptor, version, javaModuleNames);
     }
 
     private Runtime.Version versionOf(ModuleDescriptor descriptor) {

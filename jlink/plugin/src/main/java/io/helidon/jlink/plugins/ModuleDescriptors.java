@@ -21,11 +21,16 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.lang.module.ModuleDescriptor;
+import java.lang.module.ModuleDescriptor.Exports;
+import java.lang.module.ModuleDescriptor.Modifier;
 import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import io.helidon.jlink.logging.Log;
 
 import jdk.internal.module.ModuleTarget;
 import jdk.internal.org.objectweb.asm.ClassWriter;
@@ -33,7 +38,10 @@ import jdk.internal.org.objectweb.asm.ModuleVisitor;
 import jdk.internal.org.objectweb.asm.Opcodes;
 import jdk.internal.org.objectweb.asm.commons.ModuleTargetAttribute;
 
+import static java.util.Collections.emptyMap;
+import static java.util.Collections.emptySet;
 import static java.util.Collections.synchronizedSet;
+import static java.util.stream.Collectors.toMap;
 import static jdk.internal.org.objectweb.asm.Opcodes.ACC_MANDATED;
 import static jdk.internal.org.objectweb.asm.Opcodes.ACC_MODULE;
 import static jdk.internal.org.objectweb.asm.Opcodes.ACC_OPEN;
@@ -45,6 +53,7 @@ import static jdk.internal.org.objectweb.asm.Opcodes.ACC_TRANSITIVE;
  * Module descriptor utilities.
  */
 class ModuleDescriptors {
+    private static final Log LOG = Log.getLog("module-descriptors");
     private static final Set<String> AUTOMATIC_MODULES = synchronizedSet(new HashSet<>());
 
     /**
@@ -52,15 +61,15 @@ class ModuleDescriptors {
      * given modules. The module name is registered as one that should be treated as automatic.
      *
      * @param descriptor The descriptor.
-     * @param extraRequires Extra required modules.
+     * @param additionalRequires Extra required modules.
      * @param version The version. May be {@code null}.
      * @return The original or updated descriptor.
      */
     static ModuleDescriptor updateAutomaticDescriptor(ModuleDescriptor descriptor,
-                                                      Set<String> extraRequires,
+                                                      Set<String> additionalRequires,
                                                       Runtime.Version version) {
         if (descriptor.isAutomatic()) {
-            final ModuleDescriptor result = update(descriptor, extraRequires, version);
+            final ModuleDescriptor result = convertToOpen(descriptor, version, additionalRequires, true);
             AUTOMATIC_MODULES.add(descriptor.name());
             return result;
         } else {
@@ -104,57 +113,190 @@ class ModuleDescriptors {
     }
 
     /**
-     * Exports all packages and add extra requires and version if present. Since automatic modules cannot export packages,
-     * convert it to an open module.
+     * Convert the given descriptor to an open one.
      *
      * @param descriptor The descriptor.
-     * @param extraRequires The extra required modules.
-     * @param version The version. May be {@code null}.
+     * @return The updated descriptor.
+     */
+    static ModuleDescriptor convertToOpen(ModuleDescriptor descriptor) {
+        return update(descriptor, Set.of(Modifier.OPEN), null, emptyMap(), emptySet(), false);
+    }
+
+    /**
+     * Convert the given descriptor to an open one. Optionally add a version and/or requires and export all packages.
+     *
+     * @param descriptor The descriptor.
+     * @param version The version. If the given descriptor does not have a version, this one is used if not {@code null}.
+     * @param additionalRequires Any additional required modules. May be empty.
+     * @param exportPackages {@code true} if all packages should be exported.
+     * @return The updated descriptor.
+     */
+    static ModuleDescriptor convertToOpen(ModuleDescriptor descriptor,
+                                          Runtime.Version version,
+                                          Set<String> additionalRequires,
+                                          boolean exportPackages) {
+
+        return update(descriptor, Set.of(Modifier.OPEN), version, emptyMap(), additionalRequires, exportPackages);
+    }
+
+    /**
+     * Update requires in the given descriptor to perform substitutions and additions.
+     *
+     * @param descriptor The descriptor.
+     * @param substituteRequires The substitutions.
+     * @param additionalRequires The additions.
+     * @return The updated descriptor.
+     */
+    static ModuleDescriptor updateRequires(ModuleDescriptor descriptor,
+                                           Map<String, String> substituteRequires,
+                                           Set<String> additionalRequires) {
+
+        if (needsUpdate(descriptor, substituteRequires) || needsUpdate(descriptor, additionalRequires)) {
+            return update(descriptor, null, null, substituteRequires, additionalRequires, false);
+        } else {
+            return descriptor;
+        }
+    }
+
+
+    /**
+     * Copy and update a descriptor.
+     *
+     * @param descriptor The descriptor.
+     * @param modifiers The modifiers. The original modifiers are used if {@code null}.
+     * @param version The version. If the given descriptor does not have a version, this one is used if not {@code null}.
+     * @param substituteRequires Any substitute requires. May be empty.
+     * @param additionalRequires Any additional required modules. May be empty.
+     * @param exportAllPackages {@code true} if all packages should be exported; any existing exports will be copied.
      * @return The updated descriptor.
      */
     private static ModuleDescriptor update(ModuleDescriptor descriptor,
-                                           Set<String> extraRequires,
-                                           Runtime.Version version) {
+                                           Set<Modifier> modifiers,
+                                           Runtime.Version version,
+                                           Map<String, String> substituteRequires,
+                                           Set<String> additionalRequires,
+                                           boolean exportAllPackages) {
 
-        // Create a new open module descriptor from the existing one and export all packages.
+        final String moduleName = descriptor.name();
+        final Set<Modifier> newModifiers = modifiers == null ? descriptor.modifiers() : modifiers;
+        final boolean isOpen = newModifiers.contains(Modifier.OPEN);
+        final ModuleDescriptor.Builder builder = ModuleDescriptor.newModule(moduleName, newModifiers);
 
-        final ModuleDescriptor.Builder builder = ModuleDescriptor.newOpenModule(descriptor.name());
         if (descriptor.version().isPresent()) {
             builder.version(descriptor.version().get());
-        } else {
+        } else if (version != null) {
             builder.version(version.toString());
         }
-
-        final Set<String> packages = descriptor.packages();
-        builder.packages(packages);
-        packages.forEach(builder::exports);
-
-        descriptor.provides().forEach(builder::provides);
-        extraRequires.forEach(moduleName -> {
-            if (!moduleName.equals("java.base")) {
-                builder.requires(moduleName);
-            }
-        });
 
         if (descriptor.mainClass().isPresent()) {
             builder.mainClass(descriptor.mainClass().get());
         }
 
+        descriptor.provides().forEach(builder::provides);
+
+        descriptor.uses().forEach(builder::uses);
+
+        builder.packages(descriptor.packages());
+
+        // Drop any explicit opens if the new descriptor is open, otherwise just copy them
+
+        if (!isOpen) {
+            descriptor.opens().forEach(builder::opens);
+        }
+
+        // Export all packages if requested, otherwise just copy them
+
+        if (exportAllPackages) {
+            final Set<String> allPackages = descriptor.packages();
+            final Map<String, Exports> existing = descriptor.exports()
+                                                            .stream()
+                                                            .collect(toMap(Exports::source, e -> e));
+            allPackages.forEach(pkgName -> {
+                final Exports exports = existing.get(pkgName);
+                if (exports == null) {
+                    builder.exports(pkgName);
+                } else {
+                    builder.exports(exports);
+                }
+            });
+        } else {
+            descriptor.exports().forEach(builder::exports);
+        }
+
+        // Copy requires, performing substitutions if needed
+
+        descriptor.requires().forEach(r -> {
+            final String name = r.name();
+            final String substitute = substituteRequires.get(name);
+            if (substitute == null) {
+                builder.requires(r);
+            } else if (substitute.equals(moduleName)) {
+                // Drop it.
+                LOG.info("Dropping requires " + name + " from " + moduleName);
+            } else {
+                if (r.compiledVersion().isPresent()) {
+                    builder.requires(r.modifiers(), substitute, r.compiledVersion().get());
+                } else {
+                    builder.requires(r.modifiers(), substitute);
+                }
+            }
+        });
+
+        // Add requires if needed
+
+        if (!additionalRequires.isEmpty()) {
+            final Set<String> existingRequires = descriptor.requires()
+                                                           .stream()
+                                                           .map(ModuleDescriptor.Requires::name)
+                                                           .collect(Collectors.toSet());
+            final Set<String> allRequires = new HashSet<>(existingRequires);
+
+            additionalRequires.forEach(extra -> {
+                final String substitute = substituteRequires.get(extra);
+                final String module = substitute == null ? extra : substitute;
+                if (!allRequires.contains(module)) {
+                    if (!module.equals(moduleName)) {
+                        builder.requires(module);
+                        allRequires.add(module);
+                    } else {
+                        LOG.debug("Dropping requires " + module + " from " + moduleName);
+                    }
+                }
+            });
+        }
+
         return builder.build();
     }
 
+    private static boolean needsUpdate(ModuleDescriptor descriptor, Map<String, String> substituteRequires) {
+        for (ModuleDescriptor.Requires require : descriptor.requires()) {
+            if (substituteRequires.containsKey(require.name())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean needsUpdate(ModuleDescriptor descriptor, Set<String> extraRequires) {
+        for (ModuleDescriptor.Requires require : descriptor.requires()) {
+            if (!extraRequires.contains(require.name())) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     /**
-     * Copy from jdk.internal that maps automatic module modifiers to no flat.
+     * Copy from jdk.internal that maps automatic module modifier to an unset flag.
      */
     private static class ModuleInfoWriter {
 
-        private static final Map<ModuleDescriptor.Modifier, Integer>
+        private static final Map<Modifier, Integer>
             MODULE_MODS_TO_FLAGS = Map.of(
-            ModuleDescriptor.Modifier.OPEN, ACC_OPEN,
-            ModuleDescriptor.Modifier.SYNTHETIC, ACC_SYNTHETIC,
-            ModuleDescriptor.Modifier.MANDATED, ACC_MANDATED,
-            ModuleDescriptor.Modifier.AUTOMATIC, 0 // The only change!
+            Modifier.OPEN, ACC_OPEN,
+            Modifier.SYNTHETIC, ACC_SYNTHETIC,
+            Modifier.MANDATED, ACC_MANDATED,
+            Modifier.AUTOMATIC, 0 // The only change!
         );
 
         private static final Map<ModuleDescriptor.Requires.Modifier, Integer>
@@ -165,10 +307,10 @@ class ModuleDescriptors {
             ModuleDescriptor.Requires.Modifier.MANDATED, ACC_MANDATED
         );
 
-        private static final Map<ModuleDescriptor.Exports.Modifier, Integer>
+        private static final Map<Exports.Modifier, Integer>
             EXPORTS_MODS_TO_FLAGS = Map.of(
-            ModuleDescriptor.Exports.Modifier.SYNTHETIC, ACC_SYNTHETIC,
-            ModuleDescriptor.Exports.Modifier.MANDATED, ACC_MANDATED
+            Exports.Modifier.SYNTHETIC, ACC_SYNTHETIC,
+            Exports.Modifier.MANDATED, ACC_MANDATED
         );
 
         private static final Map<ModuleDescriptor.Opens.Modifier, Integer>
@@ -205,7 +347,7 @@ class ModuleDescriptors {
             }
 
             // exports
-            for (ModuleDescriptor.Exports e : md.exports()) {
+            for (Exports e : md.exports()) {
                 int flags = e.modifiers().stream()
                              .map(EXPORTS_MODS_TO_FLAGS::get)
                              .reduce(0, (x, y) -> (x | y));
@@ -237,7 +379,7 @@ class ModuleDescriptors {
             // add the ModulePackages attribute when there are packages that aren't
             // exported or open
             Stream<String> exported = md.exports().stream()
-                                        .map(ModuleDescriptor.Exports::source);
+                                        .map(Exports::source);
             Stream<String> open = md.opens().stream()
                                     .map(ModuleDescriptor.Opens::source);
             long exportedOrOpen = Stream.concat(exported, open).distinct().count();
