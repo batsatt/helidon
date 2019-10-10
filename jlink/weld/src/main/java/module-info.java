@@ -1,5 +1,3 @@
-import io.helidon.jlink.weld.JImageDiscoveryStrategy;
-
 /*
  * Copyright (c) 2019 Oracle and/or its affiliates. All rights reserved.
  *
@@ -15,12 +13,12 @@ import io.helidon.jlink.weld.JImageDiscoveryStrategy;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-module helidon.jlink.weld {
+open module helidon.jlink.weld {
 
     requires java.annotation;
     requires weld.environment.common;
+    requires weld.spi;
+    requires jandex;
 
     exports io.helidon.jlink.weld;
-
-    provides org.jboss.weld.environment.deployment.discovery.DiscoveryStrategy with JImageDiscoveryStrategy;
 }

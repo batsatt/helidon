@@ -16,13 +16,46 @@
 
 package io.helidon.jlink.weld;
 
-import javax.annotation.Priority;
-
-import org.jboss.weld.environment.deployment.discovery.AbstractDiscoveryStrategy;
+import org.jboss.weld.bootstrap.api.Bootstrap;
+import org.jboss.weld.environment.deployment.discovery.jandex.JandexDiscoveryStrategy;
+import org.jboss.weld.resources.spi.ResourceLoader;
 
 /**
- * TODO: Describe
+ * An {@link JImageDiscoveryStrategy} that assumes a Jandex index and can read from 'jrt://' urls.
  */
-@Priority(value = 100)
-public class JImageDiscoveryStrategy extends AbstractDiscoveryStrategy {
+public class JImageDiscoveryStrategy extends JandexDiscoveryStrategy {
+    static final int TOP_PRIORITY = 1000;
+
+    private ResourceLoader resourceLoader;
+    private Bootstrap bootstrap;
+    private boolean scannerSet;
+
+    public JImageDiscoveryStrategy() {
+        super(null, null, null);
+        System.out.println("JImageDiscoveryStrategy ctor");
+        // TODO: consider using reflection to remove the handlers registered by the base class ctor
+        // If do so, can explicitly register our handler(s) here rather than rely on the service
+        // loader and priority mechanism. Don't forget to remove the META-NF/services entry ;-).
+    }
+
+    @Override
+    public void setResourceLoader(ResourceLoader resourceLoader) {
+        super.setResourceLoader(resourceLoader);
+        this.resourceLoader = resourceLoader;
+        setScanner();
+    }
+
+    @Override
+    public void setBootstrap(Bootstrap bootstrap) {
+        super.setBootstrap(bootstrap);
+        this.bootstrap = bootstrap;
+        setScanner();
+    }
+
+    private void setScanner() {
+        if (!scannerSet && bootstrap != null && resourceLoader != null) {
+            this.setScanner(new JImageBeanArchiveScanner(resourceLoader, bootstrap));
+            scannerSet = true;
+        }
+    }
 }

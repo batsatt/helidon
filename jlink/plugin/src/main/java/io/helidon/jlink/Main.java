@@ -68,7 +68,7 @@ public class Main {
             System.err,
             jlinkArgs.toArray(new String[0])
         );
-        System.out.println("Done.");
+        System.out.println("Created " + imageDir);
     }
 
     private void parse() {
@@ -172,7 +172,7 @@ public class Main {
 
     private static Path assertDir(Path dir) {
         if (Files.isDirectory(dir)) {
-            return dir.toAbsolutePath();
+            return dir.toAbsolutePath().normalize();
         } else {
             throw new IllegalArgumentException(dir + " is not a directory");
         }
@@ -180,7 +180,7 @@ public class Main {
 
     private static Path assertExists(Path path) {
         if (Files.exists(path)) {
-            return path.toAbsolutePath();
+            return path.toAbsolutePath().normalize();
         } else {
             throw new IllegalArgumentException(path + " does not exist");
         }
