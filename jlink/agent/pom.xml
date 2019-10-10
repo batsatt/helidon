@@ -1,5 +1,12 @@
 <project>
     <modelVersion>4.0.0</modelVersion>
+    <dependencies>
+        <dependency>
+            <groupId>org.jboss.weld.environment</groupId>
+            <artifactId>weld-environment-common</artifactId>
+            <version>3.1.1.Final</version>
+        </dependency>
+    </dependencies>
 
     <parent>
         <groupId>io.helidon.jlink</groupId>
