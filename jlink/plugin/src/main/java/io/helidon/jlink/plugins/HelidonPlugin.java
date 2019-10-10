@@ -60,8 +60,9 @@ import static jdk.tools.jlink.internal.Archive.Entry.EntryType.CLASS_OR_RESOURCE
  */
 public class HelidonPlugin implements Plugin {
     public static final String NAME = "helidon";
-    public static final String JMOD_DIR_KEY = "jmodDir";
+    public static final String JAVA_HOME_KEY = "javaHome";
     public static final String PATCHES_DIR_KEY = "patchesDir";
+    public static final Path JAVA_HOME = Paths.get(System.getProperty("java.home"));
     private static final Log LOG = Log.getLog(NAME);
 
     private final List<DelegatingArchive> appArchives = new ArrayList<>();
@@ -70,6 +71,7 @@ public class HelidonPlugin implements Plugin {
     private final List<DelegatingArchive> allArchives = new ArrayList<>();
     private final Map<String, DelegatingArchive> packageToExporter = new HashMap<>();
     private final Map<String, String> moduleSubstitutionNames = new HashMap<>();
+    private Path javaHome;
     private Map<String, ModuleReference> javaModules;
     private Path patchesDir;
     private Set<String> javaModuleNames;
@@ -102,12 +104,12 @@ public class HelidonPlugin implements Plugin {
 
     @Override
     public void configure(Map<String, String> config) {
-        final Path appModulePath = configPath(NAME, config);
+        final Path appModulePath = configPath(NAME, config, null);
         final Path appLibsDir = appModulePath.getParent().resolve("libs"); // Asserted valid in Main
-        final Path jmodDir = configPath(JMOD_DIR_KEY, config);
         final String appModuleName = getModuleName(appModulePath);
-        patchesDir = configPath(PATCHES_DIR_KEY, config);
-        javaModules = toModulesMap(jmodDir, true);
+        javaHome = configPath(JAVA_HOME_KEY, config, JAVA_HOME);
+        patchesDir = configPath(PATCHES_DIR_KEY, config, null);
+        javaModules = toModulesMap(javaHome.resolve("jmods"), true);
         javaModuleNames = javaModules.keySet();
         javaBaseVersion = toRuntimeVersion(javaModules.get("java.base"));
         appModule = ModuleFinder.of(appModulePath).find(appModuleName).orElseThrow();
@@ -120,11 +122,11 @@ public class HelidonPlugin implements Plugin {
     @Override
     public ResourcePool transform(ResourcePool in, ResourcePoolBuilder out) {
         try {
-            LOG.info("Collecting application archives");
+            LOG.info("Collecting application modules");
             collectAppArchives();
             removeDuplicateExporters();
-            LOG.info("Preparing application archives");
-            appArchives.forEach(archive -> archive.prepare(packageToExporter));
+            LOG.info("Preparing application modules");
+            appArchives.forEach(archive -> archive.prepare(packageToExporter, javaHome));
 
             collectJavaArchives();
             addJavaExporters();
@@ -132,12 +134,12 @@ public class HelidonPlugin implements Plugin {
             javaDependencies = appArchives.stream()
                                           .flatMap(a -> a.jdkDependencies().stream())
                                           .collect(toSet());
-            LOG.info("Required Java modules: %s", javaDependencies);
-            LOG.info("Collecting required Java archives");
+            LOG.info("Directly required Java modules: %s", javaDependencies);
+            LOG.info("Collecting closure of Java modules");
             collectRequiredJavaArchives();
             sortArchives();
-            LOG.info("Java Archives: %s", javaArchives);
-            LOG.info(" App Archives: %s", appArchives);
+            LOG.info("\n%d Java modules: %s", javaArchives.size(), javaArchives);
+            LOG.info("\n%d App modules: %s\n", appArchives.size(), appArchives);
             collectPatchEntries();
             addEntries(out);
             return out.build();
@@ -559,16 +561,12 @@ public class HelidonPlugin implements Plugin {
         }
     }
 
-    private static Path configPath(String key, Map<String, String> config) {
+    private static Path configPath(String key, Map<String, String> config, Path defaultPath) {
         final String value = config.get(key);
-        return value == null ? null : Paths.get(value);
+        return value == null ? defaultPath : Paths.get(value);
     }
 
     private static IllegalArgumentException illegalArg(String message) {
         return new IllegalArgumentException(message);
-    }
-
-    private static IllegalStateException illegalState(String message) {
-        return new IllegalStateException(message);
     }
 }

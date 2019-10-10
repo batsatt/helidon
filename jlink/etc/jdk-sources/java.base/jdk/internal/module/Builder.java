@@ -153,7 +153,7 @@ final class Builder {
         this.opens = Collections.emptySet();
         this.provides = Collections.emptySet();
         this.uses = Collections.emptySet();
-        System.out.println("Building descriptor for " + name);
+       // System.out.println("Building descriptor for " + name);   // TODO Remove!
     }
 
     Builder open(boolean value) {
@@ -173,7 +173,7 @@ final class Builder {
 
     Builder automatic(boolean value) {
         this.automatic = value;
-        System.out.println("    " + name + " is automatic"); // TODO Remove!
+        // System.out.println("    " + name + " is automatic"); // TODO Remove!
         return this;
     }
 
@@ -248,7 +248,7 @@ final class Builder {
      */
     public Builder mainClass(String mc) {
         mainClass = mc;
-        System.out.println("    " + name + " has main class: " + mc); // TODO Remove!
+        // System.out.println("    " + name + " has main class: " + mc); // TODO Remove!
         return this;
     }
 

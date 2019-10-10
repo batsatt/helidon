@@ -93,7 +93,7 @@ public class AutomaticArchive extends DelegatingArchive {
     }
 
     @Override
-    protected Set<String> collectDependencies(Map<String, DelegatingArchive> appArchivesByExport) {
+    protected Set<String> collectDependencies(Map<String, DelegatingArchive> appArchivesByExport, Path javaHome) {
         final Path modulePath = delegate().getPath();
         final String jarName = modulePath.getFileName().toString();
 
@@ -102,6 +102,11 @@ public class AutomaticArchive extends DelegatingArchive {
         if (isMultiRelease) {
             args.add("--multi-release");
             args.add(releaseFeatureVersion);
+        }
+
+        if (!javaHome.equals(HelidonPlugin.JAVA_HOME)) {
+            args.add("--system");
+            args.add(javaHome.toString());
         }
 
         args.add(modulePath.toString());

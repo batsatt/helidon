@@ -26,32 +26,9 @@ import java.util.spi.ToolProvider;
 import io.helidon.jlink.plugins.HelidonPlugin;
 
 /**
- * TODO: Describe
+ * Wrapper for jlink to handle custom options.
  */
 public class Main {
-
-    // Ref: https://in.relation.to/2017/12/12/exploring-jlink-plugin-api-in-java-9/
-
-    /*
-
-java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-path ./plugin/target/helidon-jlink.jar --module helidon.jlink --appModulePath /Users/batsatt/dev/load-testing/helidon-mp/target/helidon-mp.jar
-
-
-        Invoking this tool the jlink wrapper (cleaner than using -J-*) and agent jar:
-
-        java -javaagent:./agent/target/helidon-jlink-agent.jar --module-path ./plugin/target/helidon-jlink.jar --module helidon.jlink
-
-        java -javaagent:path/to/helidon-jlink-agent.jar \
-        --module-path path/to/helidon-jlink.jar \  // OR directory containing jar
-        --module helidon.jlink \
-        --module-path $JAVA_HOME/jmods/ \
-        --module-path path/to/application-jar-or-dir \
-        --module-path path/to/application-lib-dir \
-        --add-modules helidon \   ??
-        --add-index=com.example.b:for-modules=com.example.a
-        --output path/to/jlink-image \
-
-     */
 
     // TODO: create jandex index if needed
 
@@ -64,7 +41,7 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
 
     private final String[] args;
     private final List<String> jlinkArgs;
-    private Path jmodDir;
+    private Path javaHome;
     private Path patchesDir;
     private Path appModulePath;
     private Path imageDir;
@@ -78,7 +55,7 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
     private Main(String... args) {
         this.args = args;
         this.jlinkArgs = new ArrayList<>();
-        this.jmodDir = JAVA_HOME_DIR.resolve("jmods");
+        this.javaHome = JAVA_HOME_DIR;
         this.imageDir = CURRENT_DIR.resolve("hlink-image").toAbsolutePath();
         this.pluginArgs = new StringBuilder();
         this.jlink = ToolProvider.findFirst("jlink").orElseThrow();
@@ -100,8 +77,9 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
             if (arg.startsWith("--")) {
                 if (arg.equalsIgnoreCase("--patchesDir")) {
                     patchesDir = assertDir(Paths.get(argAt(++i)));
-                } else if (arg.equalsIgnoreCase("--jmodDir")) {
-                    jmodDir = assertDir(Paths.get(argAt(++i)));
+                } else if (arg.equalsIgnoreCase("--javaHome")) {
+                    javaHome = assertDir(Paths.get(argAt(++i)));
+                    assertDir(javaHome.resolve("jmods"));
                 } else if (arg.equalsIgnoreCase("--imageDir")) {
                     imageDir = assertDir(Paths.get(argAt(++i)));
                     if (Files.exists(imageDir)) {
@@ -134,7 +112,7 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
         }
 
         appendPluginArg(null, appModulePath);
-        appendPluginArg(HelidonPlugin.JMOD_DIR_KEY, jmodDir);
+        appendPluginArg(HelidonPlugin.JAVA_HOME_KEY, javaHome);
         if (patchesDir != null) {
             appendPluginArg(HelidonPlugin.PATCHES_DIR_KEY, patchesDir);
         }
@@ -149,7 +127,7 @@ java ${JAVA_DEBUG} -javaagent:./agent/target/helidon-jlink-agent.jar --module-pa
         addArgument("--bind-services");
         addArgument("--no-header-files");
         addArgument("--no-man-pages");
-        addArgument("--strip-debug"); // TODO: option?
+        // addArgument("--strip-debug"); // TODO: option
         addArgument("--compress", "2");
     }
 

@@ -66,7 +66,7 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
         this.jdkDependencies = new HashSet<>();
     }
 
-    final void prepare(Map<String, DelegatingArchive> appArchivesByExport) {
+    final void prepare(Map<String, DelegatingArchive> appArchivesByExport, Path javaHome) {
 
         // Create a copy of the map without any references to this archive
 
@@ -76,9 +76,9 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
                                                                           .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
         // Collect dependencies
 
-        LOG.info("Collecting dependencies of %s", this);
+        LOG.info("Collecting dependencies of %s", description());
 
-        this.dependencies.addAll(collectDependencies(reduced));
+        this.dependencies.addAll(collectDependencies(reduced, javaHome));
 
         // Collect the subset of jdk dependencies
 
@@ -99,7 +99,7 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
         }
     }
 
-    protected abstract Set<String> collectDependencies(Map<String, DelegatingArchive> appArchivesByExport);
+    protected abstract Set<String> collectDependencies(Map<String, DelegatingArchive> appArchivesByExport, Path javaHome);
 
     protected abstract ModuleDescriptor updateDescriptor(ModuleDescriptor descriptor);
 
@@ -117,6 +117,10 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
 
     @Override
     public String toString() {
+        return moduleName() + '@' + version();
+    }
+
+    public String description() {
         final StringBuilder sb = new StringBuilder();
         if (isAutomatic()) {
             sb.append("automatic ");
