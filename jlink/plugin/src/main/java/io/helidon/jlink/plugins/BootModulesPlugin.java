@@ -358,7 +358,7 @@ public final class BootModulesPlugin implements Plugin {
         SystemModulesClassGenerator generator
             = new SystemModulesClassGenerator(className, moduleInfos);
         byte[] bytes = generator.getClassWriter(cf).toByteArray();
-        storeClass(className, bytes);
+        // storeClass(className, bytes);
         String rn = "/java.base/" + className + ".class";
         ResourcePoolEntry e = ResourcePoolEntry.create(rn, bytes);
         out.add(e);
@@ -1885,7 +1885,7 @@ public final class BootModulesPlugin implements Plugin {
         // write the class file to the pool as a resource
         String rn = "/java.base/" + SYSTEM_MODULES_MAP_CLASS + ".class";
         byte[] data = cw.toByteArray();
-        storeClass(SYSTEM_MODULES_MAP_CLASS, data);
+        // storeClass(SYSTEM_MODULES_MAP_CLASS, data);
         ResourcePoolEntry e = ResourcePoolEntry.create(rn, data);
         out.add(e);
 

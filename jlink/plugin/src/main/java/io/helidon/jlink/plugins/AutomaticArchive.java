@@ -93,7 +93,7 @@ public class AutomaticArchive extends DelegatingArchive {
     }
 
     @Override
-    protected Set<String> collectDependencies(Map<String, DelegatingArchive> appArchivesByExport, Path javaHome) {
+    protected Set<String> collectDependencies(ApplicationContext context) {
         final Path modulePath = delegate().getPath();
         final String jarName = modulePath.getFileName().toString();
 
@@ -104,9 +104,9 @@ public class AutomaticArchive extends DelegatingArchive {
             args.add(releaseFeatureVersion);
         }
 
-        if (!javaHome.equals(HelidonPlugin.JAVA_HOME)) {
+        if (context.isAlternateJavaHome()) {
             args.add("--system");
-            args.add(javaHome.toString());
+            args.add(context.javaHome().toString());
         }
 
         args.add(modulePath.toString());
@@ -121,6 +121,7 @@ public class AutomaticArchive extends DelegatingArchive {
         // packages to the exporting module, if possible
 
         final Set<String> dependencies = new HashSet<>();
+        final Map<String, DelegatingArchive> archivesByPackage = context.archivesByPackage();
 
         Arrays.stream(out.toString().split("\\n")) // TODO EOL
               .map(String::trim)
@@ -137,7 +138,7 @@ public class AutomaticArchive extends DelegatingArchive {
                           if (!SpecialCases.isDynamicPackage(pkgName)) {
                               if (provider.contains(" ")) {
                                   if (provider.equals("not found")) {
-                                      final DelegatingArchive exporter = appArchivesByExport.get(pkgName);
+                                      final DelegatingArchive exporter = archivesByPackage.get(pkgName);
                                       if (exporter == null) {
                                           LOG.warn("Could not find exporter for required package %s", pkgName);
                                       } else {

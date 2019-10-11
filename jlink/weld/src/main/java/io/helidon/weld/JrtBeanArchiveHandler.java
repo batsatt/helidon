@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-package io.helidon.jlink.weld;
+package io.helidon.weld;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.file.FileSystem;
@@ -27,17 +28,24 @@ import java.util.stream.Stream;
 
 import javax.annotation.Priority;
 
+import org.jboss.jandex.ClassInfo;
+import org.jboss.jandex.Index;
+import org.jboss.jandex.IndexReader;
+import org.jboss.jandex.UnsupportedVersion;
 import org.jboss.weld.environment.deployment.discovery.BeanArchiveBuilder;
 import org.jboss.weld.environment.deployment.discovery.BeanArchiveHandler;
+import org.jboss.weld.environment.deployment.discovery.jandex.Jandex;
+import org.jboss.weld.environment.logging.CommonLogger;
 
-import static io.helidon.jlink.weld.JImageBeanArchiveScanner.JRT_URI_PREFIX;
-import static io.helidon.jlink.weld.JImageDiscoveryStrategy.TOP_PRIORITY;
+import static io.helidon.weld.JrtBeanArchiveScanner.JRT_URI_PREFIX;
+import static io.helidon.weld.JrtDiscoveryStrategy.TOP_PRIORITY;
 
 /**
- * A {@link BeanArchiveHandler} that handles "jrt:/" archive references.
+ * A {@link BeanArchiveHandler} that handles "jrt:/modules/${path}" archive references and
+ * uses Jandex indexes if present or archive scanning if not.
  */
 @Priority(value = TOP_PRIORITY)
-public class JImageBeanArchiveHandler implements BeanArchiveHandler {
+public class JrtBeanArchiveHandler implements BeanArchiveHandler {
     private static final String JANDEX_INDEX_PATH = "META-INF/jandex.idx";
     private static final String JRT_BASE_URI = JRT_URI_PREFIX + "/";
     private static final int JRI_URI_PREFIX_LENGTH = JRT_URI_PREFIX.length();
@@ -48,7 +56,7 @@ public class JImageBeanArchiveHandler implements BeanArchiveHandler {
 
     private final FileSystem jrtFileSystem;
 
-    JImageBeanArchiveHandler() {
+    JrtBeanArchiveHandler() {
         this.jrtFileSystem = FileSystems.getFileSystem(URI.create(JRT_BASE_URI));
         System.out.println("JImageBeanArchiveHandler ctor"); // TODO remove
     }
@@ -57,38 +65,40 @@ public class JImageBeanArchiveHandler implements BeanArchiveHandler {
     public BeanArchiveBuilder handle(String jrtPath) {
         if (jrtPath.startsWith(JRT_URI_PREFIX)) {
             final Path moduleRoot = jrtFileSystem.getPath(jrtPath.substring(JRI_URI_PREFIX_LENGTH));
-            final Path index = index(moduleRoot);
-            if (index != null) {
-                return fromIndex(index);
-            } else {
-                return fromImage(moduleRoot);
+            final Path indexFile = indexFile(moduleRoot);
+            BeanArchiveBuilder result = null;
+            if (indexFile != null) {
+                result = fromIndex(indexFile);
             }
+            if (result == null) {
+                result = fromImage(moduleRoot);
+            }
+            return result;
         } else {
-            System.out.println("JImageBeanArchiveHandler: unsupported url " + jrtPath);
+            System.out.println("JImageBeanArchiveHandler: unsupported url " + jrtPath);  // TODO remove
             return null;
         }
     }
 
-    private Path index(Path moduleRoot) {
-        final Path index = moduleRoot.resolve(JANDEX_INDEX_PATH);
-        if (Files.exists(index)) {
-            System.out.println("JImageBeanArchiveHandler found but ignoring index: " + index);
-            return null; // TODO: fix when fromIndex() is implemented
+    private Path indexFile(Path moduleRoot) {
+        final Path indexFile = moduleRoot.resolve(JANDEX_INDEX_PATH);
+        if (Files.exists(indexFile)) {
+            return indexFile;
         } else {
             return null;
         }
     }
 
     private BeanArchiveBuilder fromImage(Path moduleRoot) {
-        System.out.println("JImageBeanArchiveHandler scanning: " + moduleRoot);
+        System.out.println("JImageBeanArchiveHandler scanning: " + moduleRoot);  // TODO remove
         final BeanArchiveBuilder builder = new BeanArchiveBuilder();
         final int rootPrefixLength = moduleRoot.toString().length();
         try (Stream<Path> stream = Files.walk(moduleRoot, Integer.MAX_VALUE)) {
             stream.filter(path -> !path.equals(moduleRoot))
-                  .filter(JImageBeanArchiveHandler::isClass)
+                  .filter(JrtBeanArchiveHandler::isClass)
                   .forEach(classFile -> {
                       final String className = toClassName(classFile, rootPrefixLength);
-                      System.out.println("  adding " + className);
+                      System.out.println("  adding " + className);   // TODO remove
                       builder.addClass(className);
                   });
             return builder;
@@ -97,13 +107,38 @@ public class JImageBeanArchiveHandler implements BeanArchiveHandler {
         }
     }
 
-    private BeanArchiveBuilder fromIndex(Path index) {
-        System.out.println("JImageBeanArchiveHandler loading index from: " + index);
-        throw new UnsupportedOperationException(); // TODO
+    private BeanArchiveBuilder fromIndex(Path indexFile) {
+        System.out.println("JImageBeanArchiveHandler loading index from: " + indexFile); // TODO remove
+        final Index index = index(indexFile);
+        if (index == null) {
+            return null;
+        } else {
+            System.out.println("JImageBeanArchiveHandler loaded index"); // TODO remove
+            final BeanArchiveBuilder builder = new BeanArchiveBuilder().setAttribute(Jandex.INDEX_ATTRIBUTE_NAME, index);
+            for (ClassInfo classInfo : index.getKnownClasses()) {
+                System.out.println("  adding " + classInfo.name());   // TODO remove
+                builder.addClass(classInfo.name().toString());
+            }
+            return builder;
+        }
+    }
+
+    private Index index(Path indexFile) {
+        try (InputStream in = Files.newInputStream(indexFile)) {
+            return new IndexReader(in).read();
+        } catch (IllegalArgumentException e) {
+            CommonLogger.LOG.warnv("Jandex index is not valid: {0}", indexFile);
+        } catch (UnsupportedVersion e) {
+            CommonLogger.LOG.warnv("Version of Jandex index is not supported: {0}", indexFile);
+        } catch (IOException e) {
+            CommonLogger.LOG.warnv("Cannot get Jandex index from: {0}", indexFile);
+            CommonLogger.LOG.catchingDebug(e);
+        }
+        return null;
     }
 
     private static boolean isClass(Path path) {
-        final String fileName =  path.getFileName().toString();
+        final String fileName = path.getFileName().toString();
         return fileName.endsWith(CLASS_FILE_SUFFIX) && !fileName.equals(MODULE_INFO_CLASS);
     }
 

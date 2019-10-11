@@ -13,19 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-module helidon.jlink {
-    exports io.helidon.jlink.plugins;
-    exports io.helidon.jlink.logging;
 
-    requires jdk.jlink;
-    requires java.instrument;
-    requires java.logging;
-    requires jandex;
+package io.helidon.jlink.plugins;
 
-    /* This doesn't work since 'provides' are processed before the required add-exports:
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
-        provides jdk.tools.jlink.plugin.Plugin with io.helidon.jlink.plugins.HelidonPlugin;
-
-       Once jlink plugins are officially supported, the Agent won't be required
-     */
+/**
+ * TODO: Describe
+ */
+public class Environment {
+    public static final Path JAVA_HOME = Paths.get(System.getProperty("java.home"));
 }

@@ -62,14 +62,15 @@ public class HelidonPlugin implements Plugin {
     public static final String NAME = "helidon";
     public static final String JAVA_HOME_KEY = "javaHome";
     public static final String PATCHES_DIR_KEY = "patchesDir";
-    public static final Path JAVA_HOME = Paths.get(System.getProperty("java.home"));
     private static final Log LOG = Log.getLog(NAME);
+    private static final String MICROPROFILE_MODULE_QUALIFIER = "microprofile";
+    private static final String WELD_MODULE_QUALIFIER = "weld";
 
     private final List<DelegatingArchive> appArchives = new ArrayList<>();
     private final Map<String, DelegatingArchive> allJavaArchives = new HashMap<>();
     private final List<DelegatingArchive> javaArchives = new ArrayList<>();
     private final List<DelegatingArchive> allArchives = new ArrayList<>();
-    private final Map<String, DelegatingArchive> packageToExporter = new HashMap<>();
+    private final Map<String, DelegatingArchive> archivesByPackage = new HashMap<>();
     private final Map<String, String> moduleSubstitutionNames = new HashMap<>();
     private Path javaHome;
     private Map<String, ModuleReference> javaModules;
@@ -80,6 +81,8 @@ public class HelidonPlugin implements Plugin {
     private Collection<ModuleReference> appLibModules;
     private Set<String> javaDependencies;
     private Map<String, Archive.Entry> patchesByPath;
+    private boolean usesMicroprofile;
+    private boolean usesWeld;
 
     /**
      * Constructor.
@@ -107,7 +110,7 @@ public class HelidonPlugin implements Plugin {
         final Path appModulePath = configPath(NAME, config, null);
         final Path appLibsDir = appModulePath.getParent().resolve("libs"); // Asserted valid in Main
         final String appModuleName = getModuleName(appModulePath);
-        javaHome = configPath(JAVA_HOME_KEY, config, JAVA_HOME);
+        javaHome = configPath(JAVA_HOME_KEY, config, Environment.JAVA_HOME);
         patchesDir = configPath(PATCHES_DIR_KEY, config, null);
         javaModules = toModulesMap(javaHome.resolve("jmods"), true);
         javaModuleNames = javaModules.keySet();
@@ -125,8 +128,10 @@ public class HelidonPlugin implements Plugin {
             LOG.info("Collecting application modules");
             collectAppArchives();
             removeDuplicateExporters();
+            checkMicroprofileAndWeld();
             LOG.info("Preparing application modules");
-            appArchives.forEach(archive -> archive.prepare(packageToExporter, javaHome));
+            final ApplicationContext context = createContext();
+            appArchives.forEach(archive -> archive.prepare(context));
 
             collectJavaArchives();
             addJavaExporters();
@@ -147,6 +152,30 @@ public class HelidonPlugin implements Plugin {
             e.printStackTrace();
             throw e;
         }
+    }
+
+    private ApplicationContext createContext() {
+        return new ApplicationContext() {
+            @Override
+            public Path javaHome() {
+                return javaHome;
+            }
+
+            @Override
+            public boolean isMicroprofile() {
+                return usesMicroprofile;
+            }
+
+            @Override
+            public boolean usesWeld() {
+                return usesWeld;
+            }
+
+            @Override
+            public Map<String, DelegatingArchive> archivesByPackage() {
+                return archivesByPackage;
+            }
+        };
     }
 
     private void addEntries(ResourcePoolBuilder pool) {
@@ -358,7 +387,7 @@ public class HelidonPlugin implements Plugin {
             } else {
                 throw new Error();
             }
-            packageToExporter.put(packageName, selected);
+            archivesByPackage.put(packageName, selected);
         });
 
         appArchives.removeAll(removals);
@@ -407,9 +436,23 @@ public class HelidonPlugin implements Plugin {
             archive.descriptor()
                    .exports()
                    .forEach(exports -> {
-                       packageToExporter.put(exports.source(), archive);
+                       archivesByPackage.put(exports.source(), archive);
                    });
         });
+    }
+
+    private void checkMicroprofileAndWeld() {
+        for (Archive archive : appArchives) {
+            final String moduleName = archive.moduleName();
+            if (moduleName.contains(MICROPROFILE_MODULE_QUALIFIER)) {
+                usesMicroprofile = true;
+            } else if (moduleName.contains(WELD_MODULE_QUALIFIER)) {
+                usesWeld = true;
+            }
+            if (usesMicroprofile && usesWeld) {
+                break;
+            }
+        }
     }
 
     private void updateRequires() {
@@ -434,7 +477,7 @@ public class HelidonPlugin implements Plugin {
                       .map(ModuleDescriptor.Provides::service)
                       .map(service -> {
                           final String packageName = packageName(service);
-                          final DelegatingArchive exporter = packageToExporter.get(packageName);
+                          final DelegatingArchive exporter = archivesByPackage.get(packageName);
                           if (exporter == null) {
                               throw new IllegalStateException("no exporter found for " + packageName);
                           }
@@ -480,7 +523,7 @@ public class HelidonPlugin implements Plugin {
                            LOG.warn("Could not find required java module %s, required by %s",
                                     required, archive.moduleName());
                            // TODO: should these be added as static requires?
-                       } else if (!added.contains(javaArchive.moduleName())){
+                       } else if (!added.contains(javaArchive.moduleName())) {
                            jdkDependencies.add(javaArchive);
                            added.add(javaArchive.moduleName());
                        }

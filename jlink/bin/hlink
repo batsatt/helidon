@@ -14,13 +14,13 @@ main() {
     ${javaHome}/bin/java ${jvmArgs} -javaagent:${agentJar} --module-path ${pluginPath} --module ${pluginModule} ${appArgs}
 }
 
-
 init() {
     readonly scriptName=$(basename "${0}")
     readonly binDir=$(dirname "${0}")
     readonly rootDir=$(cd "${binDir}"/..; pwd)
     readonly agentJar="${rootDir}/agent/target/helidon-jlink-agent.jar"
     readonly pluginJar="${rootDir}/plugin/target/helidon-jlink.jar"
+    readonly pluginLibs="${rootDir}/plugin/target/libs"
     readonly pluginDir="${rootDir}/plugin/target/classes"
     readonly mainModule="helidon.jlink"
     readonly mainClass="io.helidon.jlink.Main"
@@ -36,8 +36,6 @@ init() {
 
     [[ -d ${patchesDir} ]] && appendVar appArgs "--patchesDir ${patchesDir}"
 
-    [[ -e hlink-image ]] && rm -rf "hlink-image"
-
     while (( ${#} > 0 )); do
         case "${1}" in
             -h | --help) usage ;;
@@ -47,6 +45,7 @@ init() {
         esac
         shift
     done
+    pluginPath+=":${pluginLibs}"
 }
 
 setDebug() {

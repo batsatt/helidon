@@ -16,10 +16,13 @@
 
 package io.helidon.jlink;
 
+import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.spi.ToolProvider;
 
@@ -38,7 +41,7 @@ public class Main {
 
     private static final Path JAVA_HOME_DIR = Paths.get(System.getProperty("java.home"));
     private static final Path CURRENT_DIR = Paths.get(".");
-
+    private static final String IMAGE_SUFFIX = "-image";
     private final String[] args;
     private final List<String> jlinkArgs;
     private Path javaHome;
@@ -48,15 +51,14 @@ public class Main {
     private StringBuilder pluginArgs;
     private final ToolProvider jlink;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
         new Main(args).run();
     }
 
-    private Main(String... args) {
+    private Main(String... args) throws IOException {
         this.args = args;
         this.jlinkArgs = new ArrayList<>();
         this.javaHome = JAVA_HOME_DIR;
-        this.imageDir = CURRENT_DIR.resolve("hlink-image").toAbsolutePath();
         this.pluginArgs = new StringBuilder();
         this.jlink = ToolProvider.findFirst("jlink").orElseThrow();
         parse();
@@ -71,7 +73,7 @@ public class Main {
         System.out.println("Created " + imageDir);
     }
 
-    private void parse() {
+    private void parse() throws IOException {
         for (int i = 0; i < args.length; i++) {
             final String arg = args[i];
             if (arg.startsWith("--")) {
@@ -81,10 +83,7 @@ public class Main {
                     javaHome = assertDir(Paths.get(argAt(++i)));
                     assertDir(javaHome.resolve("jmods"));
                 } else if (arg.equalsIgnoreCase("--imageDir")) {
-                    imageDir = assertDir(Paths.get(argAt(++i)));
-                    if (Files.exists(imageDir)) {
-                        throw new IllegalArgumentException("Output dir " + imageDir + " already exists.");
-                    }
+                    imageDir = Paths.get(argAt(++i));
                 } else if (arg.equalsIgnoreCase("--verbose")) {
                     addArgument("--verbose");
                 } else {
@@ -102,13 +101,13 @@ public class Main {
 
             // Since we expect Helidon and dependencies to leverage automatic modules, we
             // can't configure jlink with the app and libs directly. It requires some module,
-            // however, so just add this one. We won't include it in the output.
+            // however, so just add our weld-jrt module.
 
-            Class<?> thisClass = getClass();
-            String thisModuleName = thisClass.getModule().getName();
-            Path thisModulePath = getModulePath(thisClass);
-            addModulePath(thisModulePath);
-            addArgument("--add-modules", thisModuleName);
+ /*           Class<?> jrtClass = JrtDiscoveryStrategy.class;
+            String jrtModuleName = jrtClass.getModule().getName();
+            Path jrtModulePath = getModulePath(jrtClass);
+            addModulePath(jrtModulePath);
+ */           addArgument("--add-modules", "java.logging");
         }
 
         appendPluginArg(null, appModulePath);
@@ -120,15 +119,35 @@ public class Main {
 
         // Swap our variant of SystemModulesPlugin for the default one
 
-        addArgument("--disable-plugin","system-modules");
+        addArgument("--disable-plugin", "system-modules");
         addArgument("--boot-modules");
 
-        addArgument("--output", imageDir);
+        addArgument("--output", prepareImageDir());
         addArgument("--bind-services");
         addArgument("--no-header-files");
         addArgument("--no-man-pages");
         // addArgument("--strip-debug"); // TODO: option
         addArgument("--compress", "2");
+    }
+
+    @SuppressWarnings("ResultOfMethodCallIgnored")
+    private Path prepareImageDir() throws IOException {
+        if (imageDir == null) {
+            final String jarName = appModulePath.getFileName().toString();
+            final String dirName = jarName.substring(0, jarName.lastIndexOf('.')) + IMAGE_SUFFIX;
+            imageDir = CURRENT_DIR.resolve(dirName);
+        }
+        if (Files.exists(imageDir)) {
+            if (Files.isDirectory(imageDir)) {
+                Files.walk(imageDir)
+                     .sorted(Comparator.reverseOrder())
+                     .map(Path::toFile)
+                     .forEach(File::delete);
+            } else {
+                throw new IllegalArgumentException(imageDir + " is not a directory");
+            }
+        }
+        return imageDir;
     }
 
     private void appendPluginArg(String key, Path value) {

@@ -32,7 +32,6 @@ import io.helidon.jlink.logging.Log;
 import jdk.tools.jlink.internal.Archive;
 
 import static java.util.stream.Collectors.toList;
-import static java.util.stream.Collectors.toMap;
 
 /**
  * An Archive wrapper base class.
@@ -66,19 +65,13 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
         this.jdkDependencies = new HashSet<>();
     }
 
-    final void prepare(Map<String, DelegatingArchive> appArchivesByExport, Path javaHome) {
+    final void prepare(ApplicationContext context) {
 
-        // Create a copy of the map without any references to this archive
-
-        final Map<String, DelegatingArchive> reduced = appArchivesByExport.entrySet()
-                                                                          .stream()
-                                                                          .filter(e -> !e.getValue().equals(this))
-                                                                          .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
         // Collect dependencies
 
         LOG.info("Collecting dependencies of %s", description());
 
-        this.dependencies.addAll(collectDependencies(reduced, javaHome));
+        this.dependencies.addAll(collectDependencies(context));
 
         // Collect the subset of jdk dependencies
 
@@ -97,9 +90,23 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
         if (newDescriptor != descriptor) {
             descriptor(newDescriptor);
         }
+
+        // Ensure Jandex index if needed
+
+        if (context.isMicroprofile()) {
+            final Jandex jandex = new Jandex(this);
+            if (jandex.isBeansArchive()) {
+                LOG.info("        JDK dependencies: %s", jdkDependencies.stream().sorted().collect(toList()));
+                LOG.info(" contains CDI beans and %s indexed", jandex.hasIndex() ? "is" : "is not");
+                if (!jandex.hasIndex()) {
+                    LOG.info(" adding Jandex index");
+                    jandex.ensureIndex();
+                }
+            }
+        }
     }
 
-    protected abstract Set<String> collectDependencies(Map<String, DelegatingArchive> appArchivesByExport, Path javaHome);
+     protected abstract Set<String> collectDependencies(ApplicationContext context);
 
     protected abstract ModuleDescriptor updateDescriptor(ModuleDescriptor descriptor);
 
@@ -227,7 +234,6 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
         return descriptor.isOpen();
     }
 
-    // TODO: move to ModuleDescriptors
     void updateRequires(Map<String, String> substituteRequires, Set<String> extraRequires) {
         final ModuleDescriptor updated = ModuleDescriptors.updateRequires(descriptor(), substituteRequires, extraRequires);
         descriptor(updated);
@@ -245,5 +251,4 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
     protected void addEntry(Archive.Entry entry) {
         extraEntries.put(entry.name(), entry);
     }
-
 }

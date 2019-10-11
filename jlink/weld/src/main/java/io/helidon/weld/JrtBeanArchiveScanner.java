@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.helidon.jlink.weld;
+package io.helidon.weld;
 
 import java.net.URL;
 
@@ -25,14 +25,14 @@ import org.jboss.weld.resources.spi.ResourceLoader;
 /**
  * A {@link DefaultBeanArchiveScanner} that handles "jrt:/" archive references.
  */
-public class JImageBeanArchiveScanner extends DefaultBeanArchiveScanner {
+public class JrtBeanArchiveScanner extends DefaultBeanArchiveScanner {
     private static final String JRT_URI_PROTOCOL = "jrt";
     static final String JRT_URI_PREFIX = JRT_URI_PROTOCOL + ":";
     private static final String JRT_URI_MODULES_PREFIX = JRT_URI_PREFIX + "/modules";
     private static final String SEP = "/";
     private static final char SEP_CHAR = '/';
 
-    JImageBeanArchiveScanner(ResourceLoader resourceLoader, Bootstrap bootstrap) {
+    JrtBeanArchiveScanner(ResourceLoader resourceLoader, Bootstrap bootstrap) {
         super(resourceLoader, bootstrap);
     }
 

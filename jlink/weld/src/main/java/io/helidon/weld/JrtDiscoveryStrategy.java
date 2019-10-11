@@ -14,23 +14,23 @@
  * limitations under the License.
  */
 
-package io.helidon.jlink.weld;
+package io.helidon.weld;
 
 import org.jboss.weld.bootstrap.api.Bootstrap;
 import org.jboss.weld.environment.deployment.discovery.jandex.JandexDiscoveryStrategy;
 import org.jboss.weld.resources.spi.ResourceLoader;
 
 /**
- * An {@link JImageDiscoveryStrategy} that assumes a Jandex index and can read from 'jrt://' urls.
+ * An {@link JrtDiscoveryStrategy} that assumes a Jandex index and can read from 'jrt://' urls.
  */
-public class JImageDiscoveryStrategy extends JandexDiscoveryStrategy {
+public class JrtDiscoveryStrategy extends JandexDiscoveryStrategy {
     static final int TOP_PRIORITY = 1000;
 
     private ResourceLoader resourceLoader;
     private Bootstrap bootstrap;
     private boolean scannerSet;
 
-    public JImageDiscoveryStrategy() {
+    public JrtDiscoveryStrategy() {
         super(null, null, null);
         System.out.println("JImageDiscoveryStrategy ctor");
         // TODO: consider using reflection to remove the handlers registered by the base class ctor
@@ -54,7 +54,7 @@ public class JImageDiscoveryStrategy extends JandexDiscoveryStrategy {
 
     private void setScanner() {
         if (!scannerSet && bootstrap != null && resourceLoader != null) {
-            this.setScanner(new JImageBeanArchiveScanner(resourceLoader, bootstrap));
+            this.setScanner(new JrtBeanArchiveScanner(resourceLoader, bootstrap));
             scannerSet = true;
         }
     }

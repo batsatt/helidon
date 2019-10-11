@@ -13,12 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-open module helidon.jlink.weld {
+open module helidon.weld.jrt {
 
     requires java.annotation;
     requires weld.environment.common;
     requires weld.spi;
     requires jandex;
 
-    exports io.helidon.jlink.weld;
+    exports io.helidon.weld;
 }

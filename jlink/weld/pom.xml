@@ -7,7 +7,7 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>helidon-jlink-weld</artifactId>
+    <artifactId>helidon-weld-jrt</artifactId>
 
     <dependencies>
         <dependency>

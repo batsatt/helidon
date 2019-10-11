@@ -17,8 +17,6 @@
 package io.helidon.jlink.plugins;
 
 import java.lang.module.ModuleDescriptor;
-import java.nio.file.Path;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -49,7 +47,7 @@ public class OpenModuleArchive extends DelegatingArchive {
     }
 
     @Override
-    protected Set<String> collectDependencies(Map<String, DelegatingArchive> appArchivesByExport, Path javaHome) {
+    protected Set<String> collectDependencies(ApplicationContext context) {
         return descriptor().requires()
                            .stream()
                            .map(ModuleDescriptor.Requires::name)

@@ -1,2 +1,2 @@
-io.helidon.jlink.weld.JImageBeanArchiveHandler
+io.helidon.weld.JrtBeanArchiveHandler
 
