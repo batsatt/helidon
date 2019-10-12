@@ -33,8 +33,6 @@ import io.helidon.jlink.plugins.HelidonPlugin;
  */
 public class Main {
 
-    // TODO: create jandex index if needed
-
     // TODO: AppCDS ! See https://jdk.java.net/13/release-notes (search for "AppCDS") for
     //              new -XX:ArchiveClassesAtExit=hello.jsa option; consider modifying server
     //              so we can start app with this option to record archive.
@@ -42,6 +40,7 @@ public class Main {
     private static final Path JAVA_HOME_DIR = Paths.get(System.getProperty("java.home"));
     private static final Path CURRENT_DIR = Paths.get(".");
     private static final String IMAGE_SUFFIX = "-image";
+    private static final String WELD_JRT_JAR_PATH = "libs/helidon-weld-jrt.jar";
     private final String[] args;
     private final List<String> jlinkArgs;
     private Path javaHome;
@@ -101,16 +100,17 @@ public class Main {
 
             // Since we expect Helidon and dependencies to leverage automatic modules, we
             // can't configure jlink with the app and libs directly. It requires some module,
-            // however, so just add our weld-jrt module.
+            // however, so just add a place holder; we won't add it to the image.
 
- /*           Class<?> jrtClass = JrtDiscoveryStrategy.class;
-            String jrtModuleName = jrtClass.getModule().getName();
-            Path jrtModulePath = getModulePath(jrtClass);
-            addModulePath(jrtModulePath);
- */           addArgument("--add-modules", "java.logging");
+            addArgument("--add-modules", "java.logging");
         }
 
         appendPluginArg(null, appModulePath);
+
+        Path ourModule = getModulePath(getClass());
+        Path weldJrtModule = assertExists(ourModule.getParent().resolve(WELD_JRT_JAR_PATH));
+        appendPluginArg(HelidonPlugin.WELD_JRT_MODULE_KEY, weldJrtModule);
+
         appendPluginArg(HelidonPlugin.JAVA_HOME_KEY, javaHome);
         if (patchesDir != null) {
             appendPluginArg(HelidonPlugin.PATCHES_DIR_KEY, patchesDir);

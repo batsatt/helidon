@@ -62,6 +62,7 @@ public class HelidonPlugin implements Plugin {
     public static final String NAME = "helidon";
     public static final String JAVA_HOME_KEY = "javaHome";
     public static final String PATCHES_DIR_KEY = "patchesDir";
+    public static final String WELD_JRT_MODULE_KEY = "weldJrtModule";
     private static final Log LOG = Log.getLog(NAME);
     private static final String MICROPROFILE_MODULE_QUALIFIER = "microprofile";
     private static final String WELD_MODULE_QUALIFIER = "weld";
@@ -75,6 +76,7 @@ public class HelidonPlugin implements Plugin {
     private Path javaHome;
     private Map<String, ModuleReference> javaModules;
     private Path patchesDir;
+    private Path weldJrtFile;
     private Set<String> javaModuleNames;
     private Runtime.Version javaBaseVersion;
     private ModuleReference appModule;
@@ -112,6 +114,7 @@ public class HelidonPlugin implements Plugin {
         final String appModuleName = getModuleName(appModulePath);
         javaHome = configPath(JAVA_HOME_KEY, config, Environment.JAVA_HOME);
         patchesDir = configPath(PATCHES_DIR_KEY, config, null);
+        weldJrtFile = configPath(WELD_JRT_MODULE_KEY, config, null);
         javaModules = toModulesMap(javaHome.resolve("jmods"), true);
         javaModuleNames = javaModules.keySet();
         javaBaseVersion = toRuntimeVersion(javaModules.get("java.base"));
@@ -452,6 +455,13 @@ public class HelidonPlugin implements Plugin {
             if (usesMicroprofile && usesWeld) {
                 break;
             }
+        }
+        if (usesMicroprofile && usesWeld) {
+            // TODO: this should be simplified!
+            final Map<String, List<ModuleReference>> modules = new HashMap<>();
+            addModule(weldJrtFile, false, modules);
+            final ModuleReference weldJrt = modules.get("helidon.weld.jrt").get(0);
+            appArchives.add(toArchive(weldJrt));
         }
     }
 
