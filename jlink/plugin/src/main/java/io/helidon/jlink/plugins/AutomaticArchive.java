@@ -184,7 +184,7 @@ public class AutomaticArchive extends DelegatingArchive {
 
         // Setup excluded packages filter if needed
 
-        checkExcludedPackages(descriptor().name());
+        handleExcludedPackages(descriptor().name());
 
         // Update the descriptor to require all discovered dependencies
 
@@ -222,18 +222,21 @@ public class AutomaticArchive extends DelegatingArchive {
         }
     }
 
-    private void checkExcludedPackages(String moduleName) {
+    private void handleExcludedPackages(String moduleName) {
         final Set<String> excludedPackagePaths = SpecialCases.excludedPackagePaths(moduleName);
         if (!excludedPackagePaths.isEmpty()) {
+
+            // Add a filter to exclude these
+
             entryFilter(entry -> {
                 for (String excludedPackage : excludedPackagePaths) {
                     if (entry.name().startsWith(excludedPackage)) {
-                        LOG.warn("excluding illegal package '%s' from module '%s", entry.name(), moduleName);
                         return false;
                     }
                 }
                 return true;
             });
+            excludedPackagePaths.forEach(pkg -> LOG.warn("excluding illegal package '%s' from module '%s", pkg, moduleName));
         }
     }
 }

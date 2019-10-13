@@ -131,7 +131,7 @@ public class HelidonPlugin implements Plugin {
             LOG.info("Collecting application modules");
             collectAppArchives();
             removeDuplicateExporters();
-            checkMicroprofileAndWeld();
+            handleMicroprofile();
             LOG.info("Preparing application modules");
             final ApplicationContext context = createContext();
             appArchives.forEach(archive -> archive.prepare(context));
@@ -150,6 +150,7 @@ public class HelidonPlugin implements Plugin {
             LOG.info("\n%d App modules: %s\n", appArchives.size(), appArchives);
             collectPatchEntries();
             addEntries(out);
+            LOG.info("Building image");
             return out.build();
         } catch (Exception e) {
             e.printStackTrace();
@@ -259,20 +260,23 @@ public class HelidonPlugin implements Plugin {
         final String fileName = moduleFile.getFileName().toString();
         final String moduleName = FILE_NAME_TO_MODULE_NAME.get(fileName);
         if (moduleName != null) {
-            final String[] parts = moduleName.split(":");
-            final String name = parts[0];
-            final String version = parts[1];
-            final String newFileName = name.replace(".", "-") + "-" + version + ".jar";
-            final Path newFile = moduleFile.getParent().resolve(newFileName);
-            if (Files.exists(newFile)) {
-                LOG.warn("Cannot rename %s to %s: file already exists!");
-            } else {
-                try {
-                    LOG.warn("Renaming '%s' to '%s' to make it map to a valid automatic module name", fileName, newFileName);
+            try {
+                final String[] parts = moduleName.split(":");
+                final String name = parts[0];
+                final String version = parts[1];
+                final String newFileName = name.replace(".", "-") + "-" + version + ".jar";
+                final Path newFile = moduleFile.getParent().resolve(newFileName);
+                LOG.warn("Renaming '%s' to '%s' to make it map to a valid automatic module name", fileName, newFileName);
+                if (Files.exists(newFile)) {
+                    LOG.warn("Deleting %s as renamed variant %s already exists", fileName, newFileName);
+                    if (!Files.deleteIfExists(moduleFile)) {
+                        LOG.warn("Deleting %s failed!", fileName);
+                    }
+                } else {
                     moduleFile = Files.move(moduleFile, newFile);
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
                 }
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
             }
         }
         return moduleFile;
@@ -444,7 +448,7 @@ public class HelidonPlugin implements Plugin {
         });
     }
 
-    private void checkMicroprofileAndWeld() {
+    private void handleMicroprofile() {
         for (Archive archive : appArchives) {
             final String moduleName = archive.moduleName();
             if (moduleName.contains(MICROPROFILE_MODULE_QUALIFIER)) {
@@ -457,7 +461,7 @@ public class HelidonPlugin implements Plugin {
             }
         }
         if (usesMicroprofile && usesWeld) {
-            // TODO: this should be simplified!
+            // TODO: this should be simplified
             final Map<String, List<ModuleReference>> modules = new HashMap<>();
             addModule(weldJrtFile, false, modules);
             final ModuleReference weldJrt = modules.get("helidon.weld.jrt").get(0);
