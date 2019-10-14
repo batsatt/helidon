@@ -34,7 +34,7 @@ import static java.util.Objects.requireNonNull;
  * that the entries are expected to override.
  */
 class Patches {
-    private static final String JAR_EXTENSION = ".jar";
+    private static final String PATCH_JAR_SUFFIX = "-patch.jar";
     private final Path patchesDir;
     private final Runtime.Version version;
 
@@ -60,10 +60,10 @@ class Patches {
         requireNonNull(file);
         requireNonNull(version);
         final String fileName = file.getFileName().toString();
-        if (!fileName.endsWith(JAR_EXTENSION)) {
+        if (!fileName.endsWith(PATCH_JAR_SUFFIX)) {
             throw new UnsupportedOperationException("Unsupported format: " + fileName);
         }
-        final String moduleName = fileName.substring(0, fileName.length() - JAR_EXTENSION.length());
+        final String moduleName = fileName.substring(0, fileName.length() - PATCH_JAR_SUFFIX.length());
         return new ModularJarArchive(moduleName, file, version);
     }
 }

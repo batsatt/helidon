@@ -20,6 +20,7 @@ import java.net.URL;
 
 import org.jboss.weld.bootstrap.api.Bootstrap;
 import org.jboss.weld.environment.deployment.discovery.DefaultBeanArchiveScanner;
+import org.jboss.weld.environment.logging.CommonLogger;
 import org.jboss.weld.resources.spi.ResourceLoader;
 
 /**
@@ -32,12 +33,20 @@ public class JrtBeanArchiveScanner extends DefaultBeanArchiveScanner {
     private static final String SEP = "/";
     private static final char SEP_CHAR = '/';
 
+    /**
+     * Constructor.
+     *
+     * @param resourceLoader The resource loader.
+     * @param bootstrap The bootstrap instance.
+     */
     JrtBeanArchiveScanner(ResourceLoader resourceLoader, Bootstrap bootstrap) {
         super(resourceLoader, bootstrap);
+        CommonLogger.LOG.tracef("%s active", getClass());
     }
 
+    @Override
     protected String getBeanArchiveReference(URL url) {
-        System.out.println("getBeanArchiveReference for " + url);
+        CommonLogger.LOG.tracef("%s mapping %s to archive ref", getClass(), url);
         if (url.getProtocol().equals(JRT_URI_PROTOCOL)) {
             // e.g. jrt:/jersey.weld2.se/META-INF/beans.xml
             String path = url.getPath();
@@ -48,13 +57,15 @@ public class JrtBeanArchiveScanner extends DefaultBeanArchiveScanner {
             if (secondSep > 0) {
                 String modulePath = path.substring(0, secondSep + 1);
                 String archiveUrl = JRT_URI_MODULES_PREFIX + modulePath;
-                System.out.println("archive ref: " + archiveUrl);
+                CommonLogger.LOG.tracef("  archive ref", archiveUrl);
                 return archiveUrl;
             } else {
+                CommonLogger.LOG.warnf("%s malformed jrt url: %s", getClass(), url);
                 return super.getBeanArchiveReference(url);
             }
         } else {
-            return super.getBeanArchiveReference(url);
+            CommonLogger.LOG.tracef("%s does not handle url: %s", getClass(), url);
+           return super.getBeanArchiveReference(url);
         }
     }
 }

@@ -9,7 +9,7 @@ main() {
 buildModule() {
     local moduleName="${1}"
     compileModule ${moduleName}
-    createOverridesJar ${moduleName}
+    createPatchesJar ${moduleName}
 }
 
 compileModule() {
@@ -21,9 +21,9 @@ compileModule() {
     ${javaHome}/bin/javac ${jvmArgs} -d "${dstDir}" $(find "${srcDir}" -name "*.java") || fail
 }
 
-createOverridesJar() {
+createPatchesJar() {
     local moduleName="${1}"
-    local file="${overridesDir}/${moduleName}.jar"
+    local file="${patchesDir}/${moduleName}-patch.jar"
     local srcDir="${classesDir}/${moduleName}"
     println "Creating ${file}"
     cd ${srcDir} || fail
@@ -33,20 +33,23 @@ createOverridesJar() {
 init() {
     readonly scriptName=$(basename "${0}")
     readonly binDir=$(dirname "${0}")
-    readonly rootDir=$(cd "${binDir}"/..; pwd)
-    readonly sourcesDir="${rootDir}/etc/jdk-sources"
-    readonly classesDir="${rootDir}/etc/jdk-classes"
-    readonly overridesDir="${rootDir}/etc/patches"
+    readonly projectDir=$(cd "${binDir}"/..; pwd)
+    readonly rootDir="${projectDir}/etc"
+    readonly sourcesDir="${rootDir}/jdk-sources"
+    readonly targetDir="${rootDir}/target"
+    readonly patchesDir="${rootDir}/patches"
+    readonly classesDir="${targetDir}/jdk-classes"
+
     [[ ${JAVA_11_HOME} ]] && javaHome=${JAVA_11_HOME} || javaHome=${JAVA_HOME}
 
-    [[ -d ${overridesDir} ]] && rm -rf ${overridesDir}
-    [[ -d ${classesDir} ]] && rm -rf ${classesDir}
-    mkdir ${overridesDir}
+    [[ -d ${targetDir} ]] && rm -rf "${targetDir}"
+    [[ -d ${patchesDir} ]] && rm -rf "${patchesDir}"
+    mkdir -p "${classesDir}"
+    mkdir "${patchesDir}"
 
     appendVar jvmArgs --add-exports="java.base/jdk.internal.misc=ALL-UNNAMED"
     appendVar jvmArgs --add-exports="java.base/jdk.internal.loader=ALL-UNNAMED"
     appendVar jvmArgs --add-exports="java.base/jdk.internal.perf=ALL-UNNAMED"
-    #appendVar jvmArgs --add-exports="java.base/jdk.internal.module=ALL-UNNAMED"
 }
 
 appendVar() {

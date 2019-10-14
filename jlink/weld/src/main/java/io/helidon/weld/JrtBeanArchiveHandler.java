@@ -56,9 +56,12 @@ public class JrtBeanArchiveHandler implements BeanArchiveHandler {
 
     private final FileSystem jrtFileSystem;
 
+    /**
+     * Constructor.
+     */
     JrtBeanArchiveHandler() {
         this.jrtFileSystem = FileSystems.getFileSystem(URI.create(JRT_BASE_URI));
-        System.out.println("JImageBeanArchiveHandler ctor"); // TODO remove
+        CommonLogger.LOG.tracef("%s active", getClass());
     }
 
     @Override
@@ -75,7 +78,7 @@ public class JrtBeanArchiveHandler implements BeanArchiveHandler {
             }
             return result;
         } else {
-            System.out.println("JImageBeanArchiveHandler: unsupported url " + jrtPath);  // TODO remove
+            CommonLogger.LOG.tracef("%s does not support url format: %s", getClass(), jrtPath);
             return null;
         }
     }
@@ -90,7 +93,7 @@ public class JrtBeanArchiveHandler implements BeanArchiveHandler {
     }
 
     private BeanArchiveBuilder fromImage(Path moduleRoot) {
-        System.out.println("JImageBeanArchiveHandler scanning: " + moduleRoot);  // TODO remove
+        CommonLogger.LOG.tracef("%s scanning: %s", getClass(), moduleRoot);
         final BeanArchiveBuilder builder = new BeanArchiveBuilder();
         final int rootPrefixLength = moduleRoot.toString().length();
         try (Stream<Path> stream = Files.walk(moduleRoot, Integer.MAX_VALUE)) {
@@ -98,7 +101,7 @@ public class JrtBeanArchiveHandler implements BeanArchiveHandler {
                   .filter(JrtBeanArchiveHandler::isClass)
                   .forEach(classFile -> {
                       final String className = toClassName(classFile, rootPrefixLength);
-                      System.out.println("  adding " + className);   // TODO remove
+                      CommonLogger.LOG.tracef("   adding %s", className);
                       builder.addClass(className);
                   });
             return builder;
@@ -108,15 +111,15 @@ public class JrtBeanArchiveHandler implements BeanArchiveHandler {
     }
 
     private BeanArchiveBuilder fromIndex(Path indexFile) {
-        System.out.println("JImageBeanArchiveHandler loading index from: " + indexFile); // TODO remove
+        CommonLogger.LOG.tracef("%s loading index from %s", getClass(), indexFile);
         final Index index = index(indexFile);
         if (index == null) {
             return null;
         } else {
-            System.out.println("JImageBeanArchiveHandler loaded index"); // TODO remove
+            CommonLogger.LOG.trace("  index loaded");
             final BeanArchiveBuilder builder = new BeanArchiveBuilder().setAttribute(Jandex.INDEX_ATTRIBUTE_NAME, index);
             for (ClassInfo classInfo : index.getKnownClasses()) {
-                System.out.println("  adding " + classInfo.name());   // TODO remove
+                CommonLogger.LOG.tracef("  adding %s", classInfo.name());
                 builder.addClass(classInfo.name().toString());
             }
             return builder;

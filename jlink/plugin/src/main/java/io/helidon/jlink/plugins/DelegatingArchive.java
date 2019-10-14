@@ -106,7 +106,7 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
         }
     }
 
-     protected abstract Set<String> collectDependencies(ApplicationContext context);
+    protected abstract Set<String> collectDependencies(ApplicationContext context);
 
     protected abstract ModuleDescriptor updateDescriptor(ModuleDescriptor descriptor);
 

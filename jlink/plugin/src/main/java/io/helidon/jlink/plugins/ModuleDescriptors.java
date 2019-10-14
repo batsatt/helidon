@@ -234,6 +234,7 @@ class ModuleDescriptors {
                 // Drop it.
                 LOG.info("Dropping requires " + name + " from " + moduleName);
             } else {
+                LOG.info("Substituting %s for %s in %s", substitute, name, moduleName);
                 if (r.compiledVersion().isPresent()) {
                     builder.requires(r.modifiers(), substitute, r.compiledVersion().get());
                 } else {

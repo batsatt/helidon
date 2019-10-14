@@ -22,9 +22,9 @@ init() {
     readonly pluginJar="${rootDir}/plugin/target/helidon-jlink.jar"
     readonly pluginLibs="${rootDir}/plugin/target/libs"
     readonly pluginDir="${rootDir}/plugin/target/classes"
+    readonly patchesDir="${rootDir}/etc/patches"
     readonly mainModule="helidon.jlink"
     readonly mainClass="io.helidon.jlink.Main"
-    readonly patchesDir="${rootDir}/etc/patches"
 
     [[ ${JAVA_11_HOME} ]] && javaHome=${JAVA_11_HOME} || javaHome=${JAVA_HOME}
 

@@ -16,12 +16,20 @@
 
 package io.helidon.weld;
 
+import javax.annotation.Priority;
+
 import org.jboss.weld.bootstrap.api.Bootstrap;
 import org.jboss.weld.environment.deployment.discovery.jandex.JandexDiscoveryStrategy;
+import org.jboss.weld.environment.logging.CommonLogger;
 import org.jboss.weld.resources.spi.ResourceLoader;
 
 /**
- * An {@link JrtDiscoveryStrategy} that assumes a Jandex index and can read from 'jrt://' urls.
+ * A {@link JandexDiscoveryStrategy} that adds support for archives in the module image file as 'jrt://' urls.
+ * It relies on placing the {@link JrtBeanArchiveHandler} first in the list of handlers via the service loader
+ * and {@link Priority} annotation mechanism; this handler supports jrt archives with or without indices.
+ * <p>
+ * The default handlers registered by the base class will process any archives not in the jrt image,
+ * e.g. jars in the class-path or module-path.
  */
 public class JrtDiscoveryStrategy extends JandexDiscoveryStrategy {
     static final int TOP_PRIORITY = 1000;
@@ -30,12 +38,12 @@ public class JrtDiscoveryStrategy extends JandexDiscoveryStrategy {
     private Bootstrap bootstrap;
     private boolean scannerSet;
 
+    /**
+     * Constructor.
+     */
     public JrtDiscoveryStrategy() {
         super(null, null, null);
-        System.out.println("JImageDiscoveryStrategy ctor");
-        // TODO: consider using reflection to remove the handlers registered by the base class ctor
-        // If do so, can explicitly register our handler(s) here rather than rely on the service
-        // loader and priority mechanism. Don't forget to remove the META-NF/services entry ;-).
+        CommonLogger.LOG.tracef("%s active", getClass());
     }
 
     @Override
