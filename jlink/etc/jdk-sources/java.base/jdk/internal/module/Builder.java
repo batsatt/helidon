@@ -279,9 +279,10 @@ final class Builder {
     public ModuleDescriptor build(int hashCode) {
         assert name != null;
         if (name.equals("io.helidon.microprofile.jwt.auth.cdi") ||     // TODO REMOVE!
+            name.equals("io.helidon.microprofile.jwt.auth") ||
             name.equals("microprofile.health.api") ||
             name.equals("jersey.weld2.se")) {
-            System.out.println("Building " + name + ", requires: " + requires);
+            System.out.println("Building " + modifiers() + " " + name + ", requires: " + requires);
         }
 
         return JLMA.newModuleDescriptor(name,

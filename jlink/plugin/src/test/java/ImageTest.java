@@ -25,6 +25,8 @@ import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
@@ -32,17 +34,30 @@ import org.junit.jupiter.api.Test;
  * Unit test for class.
  */
 class ImageTest {
-
+    // VM Options: -ea --add-exports=java.base/jdk.internal.module=ALL-UNNAMED --add-exports=java.base/jdk.internal.misc=ALL-UNNAMED --add-opens=java.base/jdk.internal.module=ALL-UNNAMED --add-reads=UNNAMED=java.base
     @Test
     public void testSomething() throws Exception {
 
         // TODO: switch to read from generated image !!
 
         jdk.internal.module.ModuleBootstrap bootstrap = null; // Just to force the --add-export
-        Path rootDir = Paths.get("target/generated/classes");
+        Path rootDir = Paths.get("classes");
         ClassLoader loader = new LocalOnlyLoader(rootDir);
         Object modules = newInstance(loader, "jdk.internal.module.SystemModules$all");
         System.out.println("got system modules");
+
+        Method moduleReadsMethod = getMethod(modules, "moduleReads");
+        Map<String, Set<String>> reads = (Map<String, Set<String>>) moduleReadsMethod.invoke(modules);
+        System.out.println("got reads!!");
+        String authCdi = "io.helidon.microprofile.jwt.auth.cdi";
+        String expectedRead = "microprofile.jwt.auth.api";
+        Set<String> authReads = reads.get(authCdi);
+        System.out.println();
+        System.out.println(authCdi + " reads " + authReads);
+        System.out.println(authCdi + (authReads.contains(expectedRead) ? " DOES read " : " does NOT read ") + expectedRead);
+        System.out.println();
+
+
         Method descriptorsMethod = getMethod(modules, "moduleDescriptors");
         ModuleDescriptor[] descriptors = (ModuleDescriptor[]) descriptorsMethod.invoke(modules);
         System.out.println("got descriptors!!");

@@ -29,7 +29,6 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.lang.module.Configuration;
 import java.lang.module.ModuleDescriptor;
 import java.lang.module.ModuleDescriptor.Exports;
@@ -42,10 +41,6 @@ import java.lang.module.ModuleReader;
 import java.lang.module.ModuleReference;
 import java.lang.module.ResolvedModule;
 import java.net.URI;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -358,14 +353,15 @@ public final class BootModulesPlugin implements Plugin {
         SystemModulesClassGenerator generator
             = new SystemModulesClassGenerator(className, moduleInfos);
         byte[] bytes = generator.getClassWriter(cf).toByteArray();
-        // storeClass(className, bytes);
+        storeClass(className, bytes);
         String rn = "/java.base/" + className + ".class";
         ResourcePoolEntry e = ResourcePoolEntry.create(rn, bytes);
         out.add(e);
         return rn;
     }
 
-    static void storeClass(String className, byte[] classData) {
+    static void storeClass(String className, byte[] classData) {  // TODO REMOVE
+/*
         final Path path = Paths.get("classes/" + className + ".class").toAbsolutePath();
         System.out.println("Storing " + path);
         try {
@@ -376,6 +372,7 @@ public final class BootModulesPlugin implements Plugin {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+*/
     }
 
     static class ModuleInfo {
@@ -1885,7 +1882,7 @@ public final class BootModulesPlugin implements Plugin {
         // write the class file to the pool as a resource
         String rn = "/java.base/" + SYSTEM_MODULES_MAP_CLASS + ".class";
         byte[] data = cw.toByteArray();
-        // storeClass(SYSTEM_MODULES_MAP_CLASS, data);
+        storeClass(SYSTEM_MODULES_MAP_CLASS, data); // TODO REMOVE
         ResourcePoolEntry e = ResourcePoolEntry.create(rn, data);
         out.add(e);
 
