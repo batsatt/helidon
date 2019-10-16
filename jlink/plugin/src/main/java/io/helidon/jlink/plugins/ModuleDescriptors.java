@@ -245,25 +245,38 @@ class ModuleDescriptors {
 
         // Add requires if needed
 
+        final Set<String> requires = descriptor.requires()
+                                                       .stream()
+                                                       .map(ModuleDescriptor.Requires::name)
+                                                       .collect(Collectors.toSet());
         if (!additionalRequires.isEmpty()) {
-            final Set<String> existingRequires = descriptor.requires()
-                                                           .stream()
-                                                           .map(ModuleDescriptor.Requires::name)
-                                                           .collect(Collectors.toSet());
-            final Set<String> allRequires = new HashSet<>(existingRequires);
-
             additionalRequires.forEach(extra -> {
                 final String substitute = substituteRequires.get(extra);
                 final String module = substitute == null ? extra : substitute;
-                if (!allRequires.contains(module)) {
+                if (!requires.contains(module)) {
                     if (!module.equals(moduleName)) {
                         builder.requires(module);
-                        allRequires.add(module);
+                        requires.add(module);
                     } else {
                         LOG.debug("Dropping requires " + module + " from " + moduleName);
                     }
                 }
             });
+        }
+
+        // Deal with special cases   TODO: Generalize somehow and make sure requires are not already present!!!
+
+        if (moduleName.equals("microprofile.health.api")) {
+            if (!requires.contains("weld.api")) {
+                builder.requires("weld.api");
+            }
+            if (!requires.contains("weld.core.impl")) {
+                builder.requires("weld.core.impl");
+            }
+        } else if (moduleName.equals("jersey.weld2.se")) {
+            if (!requires.contains("weld.core.impl")) {
+                builder.requires("weld.core.impl");
+            }
         }
 
         return builder.build();
