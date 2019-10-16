@@ -18,19 +18,22 @@ package io.helidon.jlink.plugins;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.stream.Stream;
 
 import io.helidon.jlink.logging.Log;
 
 import jdk.tools.jlink.internal.Archive;
 import org.jboss.jandex.Index;
+import org.jboss.jandex.IndexReader;
 import org.jboss.jandex.IndexWriter;
 import org.jboss.jandex.Indexer;
+import org.jboss.jandex.UnsupportedVersion;
 
 /**
- * Jandex indexing.
+ * CDI indexing.
  */
-class Jandex {
+class CdiIndexing {
     private static final Log LOG = Log.getLog("cdi");
     private static final String BEANS_PATH = "META-INF/beans.xml";
     private static final String JANDEX_INDEX_PATH = "META-INF/jandex.idx";
@@ -39,28 +42,67 @@ class Jandex {
     private final DelegatingArchive archive;
     private final boolean isBeansArchive;
     private final boolean hasIndex;
+    private Index index;
 
-    Jandex(DelegatingArchive archive) {
+    /**
+     * Add an index if required.
+     *
+     * @param context The context.
+     * @param archive The archive.
+     * @return The index.
+     */
+    static Index indexIfBeanArchive(ApplicationContext context, DelegatingArchive archive) {
+        if (context.isMicroprofile()) {
+            final CdiIndexing indexing = new CdiIndexing(archive);
+            if (indexing.isBeansArchive()) {
+                LOG.info(" contains CDI beans and %s indexed", indexing.containsIndex() ? "is" : "is not");
+                return indexing.ensureIndex();
+            }
+        }
+        return null;
+    }
+
+    private CdiIndexing(DelegatingArchive archive) {
         this.archive = archive;
         this.isBeansArchive = hasEntry(BEANS_PATH);
         this.hasIndex = isBeansArchive && hasEntry(JANDEX_INDEX_PATH);
     }
 
-    boolean isBeansArchive() {
+    private boolean isBeansArchive() {
         return isBeansArchive;
     }
 
-    boolean hasIndex() {
+    private boolean containsIndex() {
         return hasIndex;
     }
 
-    void ensureIndex() {
-        if (isBeansArchive && !hasIndex) {
-            addIndex(buildIndex());
+    private Index ensureIndex() {
+        if (isBeansArchive) {
+            if (hasIndex) {
+                LOG.info(" loading Jandex index");
+                loadIndex();
+            } else {
+                LOG.info(" adding Jandex index");
+                buildIndex();
+                addIndex();
+            }
+        }
+        return index;
+    }
+
+    private void loadIndex() {
+        try (InputStream in = getEntry(JANDEX_INDEX_PATH).stream()) {
+            index = new IndexReader(in).read();
+        } catch (IllegalArgumentException e) {
+            LOG.warn("Jandex index in module %s is not valid: %s", archive.moduleName(), e.getMessage());
+        } catch (UnsupportedVersion e) {
+            LOG.warn("Jandex index in module %s is an unsupported version: %s", archive.moduleName(), e.getMessage());
+        } catch (IOException e) {
+            LOG.warn("Jandex index in module %s cannot be read: %s", archive.moduleName(), e.getMessage());
         }
     }
 
-    private void addIndex(Index index) {
+    private void addIndex() {
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
         final IndexWriter writer = new IndexWriter(out);
         try {
@@ -71,7 +113,7 @@ class Jandex {
         }
     }
 
-    private Index buildIndex() {
+    private void buildIndex() {
         final String moduleName = archive.moduleName();
         LOG.info("Building Jandex index for module %s", moduleName);
         final Indexer indexer = new Indexer();
@@ -82,11 +124,18 @@ class Jandex {
                 LOG.warn("Could not index class %s in module %s: %s", entry.name(), moduleName, e.getMessage());
             }
         });
-        return indexer.complete();
+        this.index = indexer.complete();
     }
 
     private boolean hasEntry(String path) {
         return archive.entries().anyMatch(entry -> entry.name().equals(path));
+    }
+
+    private Archive.Entry getEntry(String path) {
+        return archive.entries()
+                      .filter(entry -> entry.name().equals(path))
+                      .findFirst()
+                      .orElseThrow(() -> new IllegalStateException("Could not get '" + path + "' entry."));
     }
 
     private Stream<Archive.Entry> classEntries() {

@@ -177,7 +177,7 @@ public class AutomaticArchive extends DelegatingArchive {
     }
 
     @Override
-    protected ModuleDescriptor updateDescriptor(ModuleDescriptor descriptor) {
+    protected ModuleDescriptor updateDescriptor(ModuleDescriptor descriptor, Set<String> additionalRequires) {
         if (isMultiRelease) {
             LOG.info("   Multi release version: %s", releaseFeatureVersion);
         }
@@ -186,9 +186,14 @@ public class AutomaticArchive extends DelegatingArchive {
 
         handleExcludedPackages(descriptor().name());
 
-        // Update the descriptor to require all discovered dependencies
+        // Update the descriptor to require all discovered and additional dependencies
 
-        return updateAutomaticDescriptor(descriptor, dependencies(), version());
+        Set<String> allDependencies = dependencies();
+        if (!additionalRequires.isEmpty()) {
+            allDependencies = new HashSet<>(dependencies());
+            allDependencies.addAll(additionalRequires);
+        }
+        return updateAutomaticDescriptor(descriptor, allDependencies, version());
     }
 
     private static boolean isMultiRelease(Manifest manifest) {

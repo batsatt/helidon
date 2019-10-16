@@ -39,7 +39,6 @@ import jdk.internal.org.objectweb.asm.Opcodes;
 import jdk.internal.org.objectweb.asm.commons.ModuleTargetAttribute;
 
 import static java.util.Collections.emptyMap;
-import static java.util.Collections.emptySet;
 import static java.util.Collections.synchronizedSet;
 import static java.util.stream.Collectors.toMap;
 import static jdk.internal.org.objectweb.asm.Opcodes.ACC_MANDATED;
@@ -116,10 +115,11 @@ class ModuleDescriptors {
      * Convert the given descriptor to an open one.
      *
      * @param descriptor The descriptor.
+     * @param additionalRequires
      * @return The updated descriptor.
      */
-    static ModuleDescriptor convertToOpen(ModuleDescriptor descriptor) {
-        return update(descriptor, Set.of(Modifier.OPEN), null, emptyMap(), emptySet(), false);
+    static ModuleDescriptor convertToOpen(ModuleDescriptor descriptor, Set<String> additionalRequires) {
+        return update(descriptor, Set.of(Modifier.OPEN), null, emptyMap(), additionalRequires, false);
     }
 
     /**
@@ -245,38 +245,23 @@ class ModuleDescriptors {
 
         // Add requires if needed
 
-        final Set<String> requires = descriptor.requires()
-                                                       .stream()
-                                                       .map(ModuleDescriptor.Requires::name)
-                                                       .collect(Collectors.toSet());
         if (!additionalRequires.isEmpty()) {
+            final Set<String> allRequires = descriptor.requires()
+                                                      .stream()
+                                                      .map(ModuleDescriptor.Requires::name)
+                                                      .collect(Collectors.toSet());
             additionalRequires.forEach(extra -> {
                 final String substitute = substituteRequires.get(extra);
                 final String module = substitute == null ? extra : substitute;
-                if (!requires.contains(module)) {
+                if (!allRequires.contains(module)) {
                     if (!module.equals(moduleName)) {
                         builder.requires(module);
-                        requires.add(module);
+                        allRequires.add(module);
                     } else {
                         LOG.debug("Dropping requires " + module + " from " + moduleName);
                     }
                 }
             });
-        }
-
-        // Deal with special cases   TODO: Generalize somehow and make sure requires are not already present!!!
-
-        if (moduleName.equals("microprofile.health.api")) {
-            if (!requires.contains("weld.api")) {
-                builder.requires("weld.api");
-            }
-            if (!requires.contains("weld.core.impl")) {
-                builder.requires("weld.core.impl");
-            }
-        } else if (moduleName.equals("jersey.weld2.se")) {
-            if (!requires.contains("weld.core.impl")) {
-                builder.requires("weld.core.impl");
-            }
         }
 
         return builder.build();

@@ -55,11 +55,11 @@ public class OpenModuleArchive extends DelegatingArchive {
     }
 
     @Override
-    protected ModuleDescriptor updateDescriptor(ModuleDescriptor descriptor) {
-        if (descriptor.isOpen()) {
+    protected ModuleDescriptor updateDescriptor(ModuleDescriptor descriptor, Set<String> additionalRequires) {
+        if (descriptor.isOpen() && additionalRequires.isEmpty()) {
             return descriptor;
         } else {
-            return convertToOpen(descriptor);
+            return convertToOpen(descriptor, additionalRequires);
         }
     }
 }

@@ -20,6 +20,8 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
+import org.jboss.jandex.Index;
+
 /**
  * Utilities for all special cases.
  */
@@ -33,6 +35,10 @@ public class SpecialCases {
     private static Map<String, Set<String>> EXCLUDED_PACKAGES_BY_MODULE = Map.of(
         "commons.lang", Set.of("org/apache/commons/lang/enum/")
     );
+
+    private static final String MICROPROFILE_MODULE_NAME_PREFIX = "microprofile.";
+    private static final Set<String> INJECT_MODULE_NAMES = Set.of("jakarta.inject", "javax.inject");
+    private static Set<String> ADDITIONAL_WELD_REQUIRES = Set.of("weld.api", "weld.core.impl");
 
     /**
      * Tests whether or not the given package should be considered dynamic (e.g. should not have a require directive).
@@ -53,5 +59,28 @@ public class SpecialCases {
     public static Set<String> excludedPackagePaths(String moduleName) {
         final Set<String> result = EXCLUDED_PACKAGES_BY_MODULE.get(moduleName);
         return result == null ? Collections.emptySet() : result;
+    }
+
+    /**
+     * Returns the (likely empty) set of additional requires for the given archive if it relies on Weld.
+     *
+     * @param context The context.
+     * @param archive The archive.
+     * @param index The index if archive contains CDI beans or {@code null} if not.
+     * @return The additional requires.
+     */
+    public static Set<String> additionalWeldRequires(ApplicationContext context,
+                                                     DelegatingArchive archive,
+                                                     Index index) {
+        if (index != null && context.usesWeld() && archive.isAutomatic()) {
+            // TODO: see if we can refine this coarse grained approach by examining the index
+            return ADDITIONAL_WELD_REQUIRES;
+        } else if (archive.moduleName().startsWith(MICROPROFILE_MODULE_NAME_PREFIX)
+                   && archive.dependencies().stream().anyMatch(INJECT_MODULE_NAMES::contains)) {
+            // This is an MP module that uses injection, so add weld
+            return ADDITIONAL_WELD_REQUIRES;
+        }
+
+        return Collections.emptySet();
     }
 }

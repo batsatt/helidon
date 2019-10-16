@@ -153,7 +153,6 @@ final class Builder {
         this.opens = Collections.emptySet();
         this.provides = Collections.emptySet();
         this.uses = Collections.emptySet();
-       // System.out.println("Building descriptor for " + name);   // TODO Remove!
     }
 
     Builder open(boolean value) {
@@ -173,7 +172,6 @@ final class Builder {
 
     Builder automatic(boolean value) {
         this.automatic = value;
-        // System.out.println("    " + name + " is automatic"); // TODO Remove!
         return this;
     }
 
@@ -248,7 +246,6 @@ final class Builder {
      */
     public Builder mainClass(String mc) {
         mainClass = mc;
-        // System.out.println("    " + name + " has main class: " + mc); // TODO Remove!
         return this;
     }
 
@@ -278,13 +275,6 @@ final class Builder {
      */
     public ModuleDescriptor build(int hashCode) {
         assert name != null;
-        if (name.equals("io.helidon.microprofile.jwt.auth.cdi") ||     // TODO REMOVE!
-            name.equals("io.helidon.microprofile.jwt.auth") ||
-            name.equals("microprofile.health.api") ||
-            name.equals("jersey.weld2.se")) {
-            System.out.println("Building " + modifiers() + " " + name + ", requires: " + requires);
-        }
-
         return JLMA.newModuleDescriptor(name,
                                         version,
                                         modifiers(),

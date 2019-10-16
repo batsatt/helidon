@@ -30,6 +30,7 @@ import java.util.stream.Stream;
 import io.helidon.jlink.logging.Log;
 
 import jdk.tools.jlink.internal.Archive;
+import org.jboss.jandex.Index;
 
 import static java.util.stream.Collectors.toList;
 
@@ -84,31 +85,25 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
                                                              .collect(toList()));
         LOG.info("        JDK dependencies: %s", jdkDependencies.stream().sorted().collect(toList()));
 
+        // Ensure index if CDI bean archive
+
+        final Index index = CdiIndexing.indexIfBeanArchive(context, this);
+
+        // Get any additional requires for weld
+
+        final Set<String> additionalRequires = SpecialCases.additionalWeldRequires(context, this, index);
+
         // Update the descriptor if needed
 
-        final ModuleDescriptor newDescriptor = updateDescriptor(descriptor);
+        final ModuleDescriptor newDescriptor = updateDescriptor(descriptor, additionalRequires);
         if (newDescriptor != descriptor) {
             descriptor(newDescriptor);
-        }
-
-        // Ensure Jandex index if needed
-
-        if (context.isMicroprofile()) {
-            final Jandex jandex = new Jandex(this);
-            if (jandex.isBeansArchive()) {
-                LOG.info("        JDK dependencies: %s", jdkDependencies.stream().sorted().collect(toList()));
-                LOG.info(" contains CDI beans and %s indexed", jandex.hasIndex() ? "is" : "is not");
-                if (!jandex.hasIndex()) {
-                    LOG.info(" adding Jandex index");
-                    jandex.ensureIndex();
-                }
-            }
         }
     }
 
     protected abstract Set<String> collectDependencies(ApplicationContext context);
 
-    protected abstract ModuleDescriptor updateDescriptor(ModuleDescriptor descriptor);
+    protected abstract ModuleDescriptor updateDescriptor(ModuleDescriptor descriptor, Set<String> additionalRequires);
 
 
     @Override
