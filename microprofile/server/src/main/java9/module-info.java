@@ -30,6 +30,7 @@ module io.helidon.microprofile.server {
     requires transitive org.glassfish.java.json;
 
     requires java.logging;
+    requires java.management;
     requires io.helidon.common.serviceloader;
 
     // there is now a hardcoded dependency on Weld, to configure additional bean defining annotation

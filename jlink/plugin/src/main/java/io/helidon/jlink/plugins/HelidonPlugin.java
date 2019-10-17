@@ -47,6 +47,7 @@ import jdk.tools.jlink.internal.DirArchive;
 import jdk.tools.jlink.internal.JmodArchive;
 import jdk.tools.jlink.internal.ModularJarArchive;
 import jdk.tools.jlink.plugin.Plugin;
+import jdk.tools.jlink.plugin.PluginException;
 import jdk.tools.jlink.plugin.ResourcePool;
 import jdk.tools.jlink.plugin.ResourcePoolBuilder;
 
@@ -63,6 +64,7 @@ public class HelidonPlugin implements Plugin {
     public static final String JAVA_HOME_KEY = "javaHome";
     public static final String PATCHES_DIR_KEY = "patchesDir";
     public static final String WELD_JRT_MODULE_KEY = "weldJrtModule";
+    public static final String CLASS_FILE_LIST_KEY = "classFile";
     private static final Log LOG = Log.getLog(NAME);
     private static final String MICROPROFILE_MODULE_QUALIFIER = "microprofile";
     private static final String WELD_MODULE_QUALIFIER = "weld";
@@ -85,6 +87,8 @@ public class HelidonPlugin implements Plugin {
     private Map<String, Archive.Entry> patchesByPath;
     private boolean usesMicroprofile;
     private boolean usesWeld;
+    private Path classListFile;
+    private List<String> classList;
 
     /**
      * Constructor.
@@ -115,6 +119,8 @@ public class HelidonPlugin implements Plugin {
         javaHome = configPath(JAVA_HOME_KEY, config, Environment.JAVA_HOME);
         patchesDir = configPath(PATCHES_DIR_KEY, config, null);
         weldJrtFile = configPath(WELD_JRT_MODULE_KEY, config, null);
+        classListFile = configPath(CLASS_FILE_LIST_KEY, config, null);
+        classList = readAllLines(classListFile);
         javaModules = toModulesMap(javaHome.resolve("jmods"), true);
         javaModuleNames = javaModules.keySet();
         javaBaseVersion = toRuntimeVersion(javaModules.get("java.base"));
@@ -153,8 +159,7 @@ public class HelidonPlugin implements Plugin {
             LOG.info("Building image");
             return out.build();
         } catch (Exception e) {
-            e.printStackTrace();
-            throw e;
+            throw new PluginException(e);
         }
     }
 
@@ -625,5 +630,13 @@ public class HelidonPlugin implements Plugin {
 
     private static IllegalArgumentException illegalArg(String message) {
         return new IllegalArgumentException(message);
+    }
+
+    private static List<String> readAllLines(Path file) {
+        try {
+            return  Files.readAllLines(file);
+        } catch (IOException e) {
+            throw new PluginException(e);
+        }
     }
 }

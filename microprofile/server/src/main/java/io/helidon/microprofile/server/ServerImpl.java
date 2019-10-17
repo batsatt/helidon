@@ -16,6 +16,7 @@
 
 package io.helidon.microprofile.server;
 
+import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.file.Path;
@@ -70,6 +71,8 @@ public class ServerImpl implements Server {
     private static final Logger LOGGER = Logger.getLogger(ServerImpl.class.getName());
     private static final Logger JERSEY_LOGGER = Logger.getLogger(ServerImpl.class.getName() + ".jersey");
     private static final Logger STARTUP_LOGGER = Logger.getLogger("io.helidon.microprofile.startup.server");
+    private static final String EXIT_ON_STARTED_KEY = "exit.on.started";
+    private static final boolean EXIT_ON_STARTED = System.getProperty(EXIT_ON_STARTED_KEY) != null;
     private static final StartedServers STARTED_SERVERS = new StartedServers();
 
     private static long initStartupTime = System.nanoTime();
@@ -503,11 +506,13 @@ public class ServerImpl implements Server {
         }
 
         if (throwRef.get() == null) {
+            if (EXIT_ON_STARTED) {
+                exitOnStarted();
+            }
             return this;
         } else {
             throw new MpException("Failed to start server", throwRef.get());
         }
-
     }
 
     @Override
@@ -563,6 +568,14 @@ public class ServerImpl implements Server {
     @Override
     public int port() {
         return port;
+    }
+
+    private static void exitOnStarted() {
+        final long startMillis = System.currentTimeMillis() - ManagementFactory.getRuntimeMXBean().getStartTime();
+        final float startSeconds = startMillis / 1000F;
+        LOGGER.info(String.format("Exiting, -D%s set. Started in %.3f seconds (from JVM start time).",
+                                  EXIT_ON_STARTED_KEY, startSeconds));
+        System.exit(0);
     }
 
     private static final class StartedServers {

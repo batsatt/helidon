@@ -26,6 +26,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.spi.ToolProvider;
 
+import io.helidon.jlink.plugins.ClassDataSharing;
 import io.helidon.jlink.plugins.HelidonPlugin;
 
 /**
@@ -38,7 +39,7 @@ public class Main {
     //              so we can start app with this option to record archive.
 
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws Exception {
         new Launcher().parse(args)
                       .buildPluginArguments()
                       .buildJlinkArguments()
@@ -58,6 +59,8 @@ public class Main {
         private Path appModulePath;
         private Path imageDir;
         private StringBuilder pluginArgs;
+        private Path weldJrtModule;
+        private Path classListFile;
         private final ToolProvider jlink;
 
         private Launcher() {
@@ -67,14 +70,35 @@ public class Main {
             this.jlink = ToolProvider.findFirst("jlink").orElseThrow();
         }
 
-        private void run() {
+        private void run() throws Exception {
             final int result = jlink.run(System.out, System.err, jlinkArgs.toArray(new String[0]));
             if (result == 0) {
                 System.out.println("Created " + imageDir);
+                createCdsArchive();
             }
         }
 
-        private Launcher parse(String... args) throws IOException {
+        private Path createClassListFile() throws Exception {
+            ClassDataSharing cds = ClassDataSharing.builder()
+                                                   .javaHome(javaHome)
+                                                   .applicationJar(appModulePath)
+                                                   .createArchive(false)
+                                                   .showOutput(false)
+                                                   .build();
+            return cds.classListFile();
+        }
+
+        private void createCdsArchive() throws Exception {
+            ClassDataSharing.builder()
+                            .javaHome(javaHome)
+                            .applicationJar(appModulePath)
+                            .classListFile(classListFile)
+                            .weldJrtJar(weldJrtModule)
+                            .showOutput(false)
+                            .build();
+        }
+
+        private Launcher parse(String... args) throws Exception {
             this.cmdLineArgs = args;
             for (int i = 0; i < args.length; i++) {
                 final String arg = args[i];
@@ -104,6 +128,8 @@ public class Main {
                 assertDir(appModulePath.getParent().resolve("libs"));
             }
 
+            classListFile = createClassListFile();
+
             imageDir = prepareImageDir();
 
             return this;
@@ -119,7 +145,7 @@ public class Main {
             // Tell our plugin where the weld-jrt.jar is
 
             Path ourModule = getModulePath(getClass());
-            Path weldJrtModule = assertExists(ourModule.getParent().resolve(WELD_JRT_JAR_PATH));
+            this.weldJrtModule = assertExists(ourModule.getParent().resolve(WELD_JRT_JAR_PATH));
             appendPluginArg(HelidonPlugin.WELD_JRT_MODULE_KEY, weldJrtModule);
 
             // Tell our plugin what JDK to use
@@ -131,6 +157,10 @@ public class Main {
             if (patchesDir != null) {
                 appendPluginArg(HelidonPlugin.PATCHES_DIR_KEY, patchesDir);
             }
+
+            // Tell our plugin where the class list file is
+
+            appendPluginArg(HelidonPlugin.CLASS_FILE_LIST_KEY, classListFile);
 
             return this;
         }
