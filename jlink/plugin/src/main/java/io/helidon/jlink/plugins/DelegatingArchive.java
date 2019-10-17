@@ -30,7 +30,7 @@ import java.util.stream.Stream;
 import io.helidon.jlink.logging.Log;
 
 import jdk.tools.jlink.internal.Archive;
-import org.jboss.jandex.Index;
+import org.jboss.jandex.IndexView;
 
 import static java.util.stream.Collectors.toList;
 
@@ -87,7 +87,7 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
 
         // Ensure index if CDI bean archive
 
-        final Index index = CdiIndexing.indexIfBeanArchive(context, this);
+        final IndexView index = CdiIndexing.indexIfBeanArchive(context, this);
 
         // Get any additional requires for weld
 

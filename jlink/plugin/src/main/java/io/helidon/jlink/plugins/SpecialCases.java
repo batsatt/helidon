@@ -20,7 +20,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
-import org.jboss.jandex.Index;
+import org.jboss.jandex.IndexView;
 
 /**
  * Utilities for all special cases.
@@ -71,7 +71,7 @@ public class SpecialCases {
      */
     public static Set<String> additionalWeldRequires(ApplicationContext context,
                                                      DelegatingArchive archive,
-                                                     Index index) {
+                                                     IndexView index) {
         if (index != null && context.usesWeld() && archive.isAutomatic()) {
             // TODO: see if we can refine this coarse grained approach by examining the index
             return ADDITIONAL_WELD_REQUIRES;

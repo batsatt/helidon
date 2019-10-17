@@ -26,6 +26,7 @@ import io.helidon.jlink.logging.Log;
 import jdk.tools.jlink.internal.Archive;
 import org.jboss.jandex.Index;
 import org.jboss.jandex.IndexReader;
+import org.jboss.jandex.IndexView;
 import org.jboss.jandex.IndexWriter;
 import org.jboss.jandex.Indexer;
 import org.jboss.jandex.UnsupportedVersion;
@@ -51,7 +52,7 @@ class CdiIndexing {
      * @param archive The archive.
      * @return The index.
      */
-    static Index indexIfBeanArchive(ApplicationContext context, DelegatingArchive archive) {
+    static IndexView indexIfBeanArchive(ApplicationContext context, DelegatingArchive archive) {
         if (context.isMicroprofile()) {
             final CdiIndexing indexing = new CdiIndexing(archive);
             if (indexing.isBeansArchive()) {

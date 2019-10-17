@@ -17,7 +17,7 @@
 
 module io.helidon.microprofile.openapi {
     requires java.logging;
-    
+
     requires smallrye.open.api;
 
     requires microprofile.config.api;
@@ -27,4 +27,6 @@ module io.helidon.microprofile.openapi {
     requires jandex;
 
     exports io.helidon.microprofile.openapi;
+
+    provides io.helidon.microprofile.server.spi.MpService with io.helidon.microprofile.openapi.OpenAPIMpService;
 }

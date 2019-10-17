@@ -21,8 +21,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
+import java.net.URL;
 import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -31,6 +35,7 @@ import javax.enterprise.event.Observes;
 import javax.enterprise.inject.spi.Extension;
 import javax.enterprise.inject.spi.ProcessAnnotatedType;
 
+import org.jboss.jandex.CompositeIndex;
 import org.jboss.jandex.Index;
 import org.jboss.jandex.IndexReader;
 import org.jboss.jandex.IndexView;
@@ -43,11 +48,11 @@ import org.jboss.jandex.Indexer;
  */
 public class IndexBuilder implements Extension {
 
-    private static final String INDEX_PATH = "/META-INF/jandex.idx";
+    private static final String INDEX_PATH = "META-INF/jandex.idx";
 
     private static final Logger LOGGER = Logger.getLogger(IndexBuilder.class.getName());
 
-    private final boolean isIndexPresentOnClasspath;
+    private final List<URL> indexUrls;
 
     private final Set<Class<?>> annotatedTypes = new HashSet<>();
 
@@ -57,18 +62,18 @@ public class IndexBuilder implements Extension {
      * @throws IOException in case of error checking for the Jandex index file
      */
     public IndexBuilder() throws IOException {
-        isIndexPresentOnClasspath = checkForIndexFile();
-        if (isIndexPresentOnClasspath) {
-            LOGGER.log(Level.FINE, () -> String.format("Index file %s was located and will be used", INDEX_PATH));
-        } else {
+        indexUrls = findIndexFiles();
+        if (indexUrls.isEmpty()) {
             LOGGER.log(Level.INFO, () -> String.format(
-                    "OpenAPI support could not locate the Jandex index file %s "
-                    + "so will build an in-memory index.%n"
-                    + "This slows your app start-up and, depending on CDI configuration, "
-                    + "might omit some type information needed for a complete OpenAPI document.%n"
-                    + "Consider using the Jandex maven plug-in during your build "
-                    + "to create the index and add it to your app.",
-                    INDEX_PATH));
+                "OpenAPI support could not locate the Jandex index file %s "
+                + "so will build an in-memory index.%n"
+                + "This slows your app start-up and, depending on CDI configuration, "
+                + "might omit some type information needed for a complete OpenAPI document.%n"
+                + "Consider using the Jandex maven plug-in during your build "
+                + "to create the index and add it to your app.",
+                INDEX_PATH));
+        } else {
+            LOGGER.log(Level.FINE, () -> String.format("Index file %s was located and will be used", INDEX_PATH));
         }
     }
 
@@ -80,11 +85,10 @@ public class IndexBuilder implements Extension {
      * @param event {@code ProcessAnnotatedType} event
      */
     private <X> void processAnnotatedType(@Observes ProcessAnnotatedType<X> type) {
-        if (isIndexPresentOnClasspath) {
-            return;
+        if (indexUrls == null) {
+            Class<?> c = type.getAnnotatedType().getJavaClass();
+            annotatedTypes.add(c);
         }
-        Class<?> c = type.getAnnotatedType().getJavaClass();
-        annotatedTypes.add(c);
     }
 
     /**
@@ -96,17 +100,21 @@ public class IndexBuilder implements Extension {
      * reading class bytecode from the classpath
      */
     public IndexView indexView() throws IOException {
-        return isIndexPresentOnClasspath ? existingIndexFileReader() : indexFromHarvestedClasses();
+        return indexUrls == null ? indexFromHarvestedClasses() : existingIndexFileReader();
     }
 
     private IndexView existingIndexFileReader() throws IOException {
-        try (InputStream jandexIS = getClass().getResourceAsStream(INDEX_PATH)) {
-            LOGGER.log(Level.FINE, "Using Jandex index at {0}", INDEX_PATH);
-            return new IndexReader(jandexIS).read();
-        } catch (IOException ex) {
-            throw new IOException("Attempted to read from previously-located index file "
-                    + INDEX_PATH + " but the file cannot be found", ex);
+        List<IndexView> indices = new ArrayList<>();
+        for (URL url : indexUrls) {
+            try (InputStream jandexIS = url.openStream()) {
+                LOGGER.log(Level.FINE, "Using Jandex index at {0}", url);
+                indices.add(new IndexReader(jandexIS).read());
+            } catch (IOException ex) {
+                throw new IOException("Attempted to read from previously-located index file "
+                                      + url + " but the file cannot be found", ex);
+            }
         }
+        return indices.size() == 1 ? indices.get(0) : CompositeIndex.create(indices);
     }
 
     private IndexView indexFromHarvestedClasses() throws IOException {
@@ -127,10 +135,14 @@ public class IndexBuilder implements Extension {
         return result;
     }
 
-    private boolean checkForIndexFile() throws IOException {
-        try (InputStream jandexIS = getClass().getResourceAsStream(INDEX_PATH)) {
-            return jandexIS != null;
+    private List<URL> findIndexFiles() throws IOException {
+        List<URL> result = new ArrayList<>();
+        Enumeration<URL> enumeration =  contextClassLoader().getResources(INDEX_PATH);
+        while(enumeration.hasMoreElements()) {
+            result.add(enumeration.nextElement());
         }
+        // TODO: Filter based on application classes(?)
+        return result;
     }
 
     private static void dumpIndex(Level level, Index index) throws UnsupportedEncodingException {
