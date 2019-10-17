@@ -433,6 +433,11 @@
                 <artifactId>helidon-health-checks</artifactId>
                 <version>${helidon.version}</version>
             </dependency>
+            <dependency>
+                <groupId>io.helidon.health</groupId>
+                <artifactId>helidon-health-common</artifactId>
+                <version>${helidon.version}</version>
+            </dependency>
 
             <!-- jwt -->
             <dependency>
@@ -480,6 +485,11 @@
             <dependency>
                 <groupId>io.helidon.common</groupId>
                 <artifactId>helidon-common-service-loader</artifactId>
+                <version>${helidon.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.helidon.common</groupId>
+                <artifactId>helidon-common-media-type</artifactId>
                 <version>${helidon.version}</version>
             </dependency>
             <dependency>
