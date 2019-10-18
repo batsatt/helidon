@@ -16,7 +16,9 @@
 
 package io.helidon.jlink.plugins;
 
+import java.io.BufferedOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.lang.module.FindException;
 import java.lang.module.ModuleDescriptor;
@@ -28,6 +30,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -36,6 +39,11 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
+import java.util.jar.Attributes;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.jar.JarOutputStream;
+import java.util.jar.Manifest;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -68,6 +76,8 @@ public class HelidonPlugin implements Plugin {
     private static final Log LOG = Log.getLog(NAME);
     private static final String MICROPROFILE_MODULE_QUALIFIER = "microprofile";
     private static final String WELD_MODULE_QUALIFIER = "weld";
+    private static final String AUTOMATIC_MODULE_NAME = "Automatic-Module-Name";
+    private static final String MANIFEST_PATH = "META-INF/MANIFEST.MF";
 
     private final List<DelegatingArchive> appArchives = new ArrayList<>();
     private final Map<String, DelegatingArchive> allJavaArchives = new HashMap<>();
@@ -75,6 +85,7 @@ public class HelidonPlugin implements Plugin {
     private final List<DelegatingArchive> allArchives = new ArrayList<>();
     private final Map<String, DelegatingArchive> archivesByPackage = new HashMap<>();
     private final Map<String, String> moduleSubstitutionNames = new HashMap<>();
+    private final byte[] buffer = new byte[8192];
     private Path javaHome;
     private Map<String, ModuleReference> javaModules;
     private Path patchesDir;
@@ -89,6 +100,7 @@ public class HelidonPlugin implements Plugin {
     private boolean usesWeld;
     private Path classListFile;
     private List<String> classList;
+
 
     /**
      * Constructor.
@@ -255,30 +267,48 @@ public class HelidonPlugin implements Plugin {
                       .collect(toSet());
     }
 
-    // TODO: This is going pretty far, but for now...
-    private static final Map<String, String> FILE_NAME_TO_MODULE_NAME = Map.of(
-        "jboss-interceptors-api_1.2_spec-1.0.0.Final.jar", // Doesn't have an "Automatic-Module-Name" manifest entry
-        "javax.interceptor.api:1.2"
-    );
-
-    private Path addAutomaticModuleNameTo(Path moduleFile) {
+    private Path addAutomaticModuleNameTo(Path moduleFile) {   // TODO: Add manifest entry instead of rename!!
         final String fileName = moduleFile.getFileName().toString();
-        final String moduleName = FILE_NAME_TO_MODULE_NAME.get(fileName);
-        if (moduleName != null) {
-            try {
-                final String[] parts = moduleName.split(":");
-                final String name = parts[0];
-                final String version = parts[1];
-                final String newFileName = name.replace(".", "-") + "-" + version + ".jar";
-                final Path newFile = moduleFile.getParent().resolve(newFileName);
-                LOG.warn("Renaming '%s' to '%s' to make it map to a valid automatic module name", fileName, newFileName);
-                if (Files.exists(newFile)) {
-                    LOG.warn("Deleting %s as renamed variant %s already exists", fileName, newFileName);
-                    if (!Files.deleteIfExists(moduleFile)) {
-                        LOG.warn("Deleting %s failed!", fileName);
+        final String qualifiedModuleName = SpecialCases.moduleNameFor(fileName);
+        if (qualifiedModuleName != null) {
+            final String[] parts = qualifiedModuleName.split(":");
+            final String moduleName = parts[0];
+            try (final JarFile jarFile = new JarFile(moduleFile.toFile())) {
+                Manifest manifest = jarFile.getManifest();
+                if (manifest == null) {
+                    manifest = new Manifest();
+                }
+                final Attributes attrs = manifest.getMainAttributes();
+                attrs.putValue(AUTOMATIC_MODULE_NAME, moduleName);
+
+                final String tempFileName = fileName + ".new";
+                final Path tempFile = moduleFile.getParent().resolve(tempFileName);
+                try (BufferedOutputStream out = new BufferedOutputStream(Files.newOutputStream(tempFile))) {
+                    try (final JarOutputStream jar = new JarOutputStream(out, manifest)) {
+                        final Enumeration<JarEntry> entries = jarFile.entries();
+                        while (entries.hasMoreElements()) {
+                            final JarEntry entry = entries.nextElement();
+                            if (!entry.getName().equals(MANIFEST_PATH)) {
+                                jar.putNextEntry(new JarEntry(entry.getName()));
+                                if (!entry.isDirectory()) {
+                                    final InputStream is = jarFile.getInputStream(entry);
+                                    int bytesRead = 0;
+                                    while ((bytesRead = is.read(buffer)) != -1) {
+                                        jar.write(buffer, 0, bytesRead);
+                                    }
+                                    is.close();
+                                }
+                                jar.flush();
+                                jar.closeEntry();
+                            }
+                        }
                     }
+                }
+
+                if (Files.deleteIfExists(moduleFile)) {
+                    Files.move(tempFile, moduleFile);
                 } else {
-                    moduleFile = Files.move(moduleFile, newFile);
+                    throw new PluginException("Deleting " + moduleFile + " failed!");
                 }
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
@@ -634,7 +664,7 @@ public class HelidonPlugin implements Plugin {
 
     private static List<String> readAllLines(Path file) {
         try {
-            return  Files.readAllLines(file);
+            return Files.readAllLines(file);
         } catch (IOException e) {
             throw new PluginException(e);
         }

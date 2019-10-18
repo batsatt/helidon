@@ -89,13 +89,14 @@ public class Main {
         }
 
         private void createCdsArchive() throws Exception {
-            ClassDataSharing.builder()
-                            .javaHome(javaHome)
-                            .applicationJar(appModulePath)
-                            .classListFile(classListFile)
-                            .weldJrtJar(weldJrtModule)
-                            .showOutput(false)
-                            .build();
+            ClassDataSharing cds = ClassDataSharing.builder()
+                                                   .javaHome(imageDir)
+                                                   .applicationJar(appModulePath)
+                                                   .classListFile(classListFile)
+                                                   .weldJrtJar(weldJrtModule)
+                                                   .showOutput(true)
+                                                   .build();
+            System.out.println("Added " + cds.archiveFile());
         }
 
         private Launcher parse(String... args) throws Exception {

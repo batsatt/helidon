@@ -36,6 +36,11 @@ public class SpecialCases {
         "commons.lang", Set.of("org/apache/commons/lang/enum/")
     );
 
+    private static final Map<String, String> FILE_NAME_TO_MODULE_NAME = Map.of(
+        "jboss-interceptors-api_1.2_spec-1.0.0.Final.jar", // Doesn't have an "Automatic-Module-Name" manifest entry
+        "javax.interceptor.api:1.2"
+    );
+
     private static final String MICROPROFILE_MODULE_NAME_PREFIX = "microprofile.";
     private static final Set<String> INJECT_MODULE_NAMES = Set.of("jakarta.inject", "javax.inject");
     private static Set<String> ADDITIONAL_WELD_REQUIRES = Set.of("weld.api", "weld.core.impl");
@@ -48,6 +53,16 @@ public class SpecialCases {
      */
     public static boolean isDynamicPackage(String packageName) {
         return DYNAMIC_PACKAGES.contains(packageName);
+    }
+
+    /**
+     * Returns the module name for the given jar file name, if known.
+     *
+     * @param jarFileName The jar file name.
+     * @return The module name or {@code null} if not known.
+     */
+    public static String moduleNameFor(String jarFileName) {
+        return FILE_NAME_TO_MODULE_NAME.get(jarFileName);
     }
 
     /**
