@@ -72,10 +72,9 @@ public class HelidonPlugin implements Plugin {
     public static final String JAVA_HOME_KEY = "javaHome";
     public static final String PATCHES_DIR_KEY = "patchesDir";
     public static final String WELD_JRT_MODULE_KEY = "weldJrtModule";
-    public static final String CLASS_FILE_LIST_KEY = "classFile";
     private static final Log LOG = Log.getLog(NAME);
-    private static final String MICROPROFILE_MODULE_QUALIFIER = "microprofile";
-    private static final String WELD_MODULE_QUALIFIER = "weld";
+    private static final String MICROPROFILE_MODULE_QUALIFIER = "io.helidon.microprofile.";
+    private static final String WELD_MODULE_QUALIFIER = "weld.";
     private static final String AUTOMATIC_MODULE_NAME = "Automatic-Module-Name";
     private static final String MANIFEST_PATH = "META-INF/MANIFEST.MF";
 
@@ -87,6 +86,9 @@ public class HelidonPlugin implements Plugin {
     private final Map<String, String> moduleSubstitutionNames = new HashMap<>();
     private final byte[] buffer = new byte[8192];
     private Path javaHome;
+    private Path appModulePath;
+    private Path appLibsDir;
+    private String appModuleName;
     private Map<String, ModuleReference> javaModules;
     private Path patchesDir;
     private Path weldJrtFile;
@@ -100,7 +102,6 @@ public class HelidonPlugin implements Plugin {
     private boolean usesWeld;
     private Path classListFile;
     private List<String> classList;
-
 
     /**
      * Constructor.
@@ -120,33 +121,40 @@ public class HelidonPlugin implements Plugin {
 
     @Override
     public Category getType() {
-        return Category.FILTER; // So sorts before SystemModulesPlugin!
+        return Category.TRANSFORMER;
     }
 
     @Override
     public void configure(Map<String, String> config) {
-        final Path appModulePath = configPath(NAME, config, null);
-        final Path appLibsDir = appModulePath.getParent().resolve("libs"); // Asserted valid in Main
-        final String appModuleName = getModuleName(appModulePath);
+        appModulePath = configPath(NAME, config, null);
+        appLibsDir = appModulePath.getParent().resolve("libs"); // Asserted valid in Main
+        appModuleName = getModuleName(appModulePath);
         javaHome = configPath(JAVA_HOME_KEY, config, Environment.JAVA_HOME);
         patchesDir = configPath(PATCHES_DIR_KEY, config, null);
         weldJrtFile = configPath(WELD_JRT_MODULE_KEY, config, null);
-        classListFile = configPath(CLASS_FILE_LIST_KEY, config, null);
-        classList = readAllLines(classListFile);
         javaModules = toModulesMap(javaHome.resolve("jmods"), true);
         javaModuleNames = javaModules.keySet();
         javaBaseVersion = toRuntimeVersion(javaModules.get("java.base"));
-        appModule = ModuleFinder.of(appModulePath).find(appModuleName).orElseThrow();
-        appLibModules = toModules(appLibsDir, false);
-        LOG.info("appModuleName: %s\n" +
-                 "appModulePath: %s\n" +
-                 "   appLibsDir: %s", appModuleName, appModulePath, appLibsDir);
+        classListFile = createClassListFile();
+        classList = readAllLines(classListFile);
+
+        LOG.info("Application configuration:\n");
+        LOG.info("       java home: %s", javaHome);
+        LOG.info("    java version: %s", javaBaseVersion);
+        LOG.info("   appModuleName: %s", appModuleName);
+        LOG.info("   appModulePath: %s", appModulePath);
+        LOG.info("      appLibsDir: %s", appLibsDir);
+        LOG.info(" startup classes: %d\n", classList.size());
     }
 
     @Override
     public ResourcePool transform(ResourcePool in, ResourcePoolBuilder out) {
         try {
             LOG.info("Collecting application modules");
+            appModule = ModuleFinder.of(appModulePath).find(appModuleName).orElseThrow();
+            appLibModules = toModules(appLibsDir, false);
+
+            LOG.info("Opening application modules");
             collectAppArchives();
             removeDuplicateExporters();
             handleMicroprofile();
@@ -176,7 +184,7 @@ public class HelidonPlugin implements Plugin {
     }
 
     private ApplicationContext createContext() {
-        return new ApplicationContext() {
+        return ApplicationContext.set(new ApplicationContext() {
             @Override
             public Path javaHome() {
                 return javaHome;
@@ -196,7 +204,36 @@ public class HelidonPlugin implements Plugin {
             public Map<String, DelegatingArchive> archivesByPackage() {
                 return archivesByPackage;
             }
-        };
+
+            @Override
+            public String applicationModuleName() {
+                return appModule.descriptor().name();
+            }
+
+            @Override
+            public Path classListFile() {
+                return classListFile;
+            }
+
+            @Override
+            public List<String> classList() {
+                return classList;
+            }
+        });
+    }
+
+    private Path createClassListFile() {
+        try {
+            ClassDataSharing cds = ClassDataSharing.builder()
+                                                   .javaHome(javaHome)
+                                                   .applicationJar(appModulePath)
+                                                   .createArchive(false)
+                                                   .showOutput(false)
+                                                   .build();
+            return cds.classListFile();
+        } catch (Exception e) {
+            throw new PluginException(e);
+        }
     }
 
     private void addEntries(ResourcePoolBuilder pool) {
@@ -486,9 +523,9 @@ public class HelidonPlugin implements Plugin {
     private void handleMicroprofile() {
         for (Archive archive : appArchives) {
             final String moduleName = archive.moduleName();
-            if (moduleName.contains(MICROPROFILE_MODULE_QUALIFIER)) {
+            if (moduleName.startsWith(MICROPROFILE_MODULE_QUALIFIER)) {
                 usesMicroprofile = true;
-            } else if (moduleName.contains(WELD_MODULE_QUALIFIER)) {
+            } else if (moduleName.startsWith(WELD_MODULE_QUALIFIER)) {
                 usesWeld = true;
             }
             if (usesMicroprofile && usesWeld) {

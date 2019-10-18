@@ -26,27 +26,30 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.spi.ToolProvider;
 
+import io.helidon.jlink.logging.Log;
+import io.helidon.jlink.plugins.ApplicationContext;
+import io.helidon.jlink.plugins.BootOrderPlugin;
 import io.helidon.jlink.plugins.ClassDataSharing;
 import io.helidon.jlink.plugins.HelidonPlugin;
+
+import jdk.tools.jlink.plugin.PluginException;
 
 /**
  * Wrapper for jlink to handle custom options.
  */
 public class Main {
 
-    // TODO: AppCDS ! See https://jdk.java.net/13/release-notes (search for "AppCDS") for
-    //              new -XX:ArchiveClassesAtExit=hello.jsa option; consider modifying server
-    //              so we can start app with this option to record archive.
-
-
     public static void main(String[] args) throws Exception {
-        new Launcher().parse(args)
-                      .buildPluginArguments()
-                      .buildJlinkArguments()
-                      .run();
+        new Linker().parse(args)
+                    .buildHelidonPluginArguments()
+                    .buildJlinkArguments()
+                    .buildImage()
+                    .addCdsArchive()
+                    .complete();
     }
 
-    private static class Launcher {
+    private static class Linker {
+        private static final Log LOG = Log.getLog("launcher");
         private static final Path JAVA_HOME_DIR = Paths.get(System.getProperty("java.home"));
         private static final Path CURRENT_DIR = Paths.get(".");
         private static final String IMAGE_SUFFIX = "-image";
@@ -58,48 +61,46 @@ public class Main {
         private Path patchesDir;
         private Path appModulePath;
         private Path imageDir;
-        private StringBuilder pluginArgs;
-        private Path weldJrtModule;
-        private Path classListFile;
+        private StringBuilder helidonPluginArgs;
         private final ToolProvider jlink;
 
-        private Launcher() {
+        private Linker() {
             this.jlinkArgs = new ArrayList<>();
             this.javaHome = JAVA_HOME_DIR;
-            this.pluginArgs = new StringBuilder();
+            this.helidonPluginArgs = new StringBuilder();
             this.jlink = ToolProvider.findFirst("jlink").orElseThrow();
         }
 
-        private void run() throws Exception {
+        private Linker buildImage() {
             final int result = jlink.run(System.out, System.err, jlinkArgs.toArray(new String[0]));
-            if (result == 0) {
-                System.out.println("Created " + imageDir);
-                createCdsArchive();
+            if (result != 0) {
+                throw new Error("Image creation failed.");
             }
+            return this;
         }
 
-        private Path createClassListFile() throws Exception {
-            ClassDataSharing cds = ClassDataSharing.builder()
-                                                   .javaHome(javaHome)
-                                                   .applicationJar(appModulePath)
-                                                   .createArchive(false)
-                                                   .showOutput(false)
-                                                   .build();
-            return cds.classListFile();
+        private Linker addCdsArchive() {
+            try {
+                final ApplicationContext context = ApplicationContext.get();
+                final ClassDataSharing cds = ClassDataSharing.builder()
+                                                             .javaHome(imageDir)
+                                                             .moduleName(context.applicationModuleName())
+                                                             .classListFile(context.classListFile())
+                                                             .showOutput(true)
+                                                             .build();
+                LOG.info("Added %s", cds.archiveFile());
+            } catch (Exception e) {
+                throw new PluginException(e);
+            }
+            return this;
         }
 
-        private void createCdsArchive() throws Exception {
-            ClassDataSharing cds = ClassDataSharing.builder()
-                                                   .javaHome(imageDir)
-                                                   .applicationJar(appModulePath)
-                                                   .classListFile(classListFile)
-                                                   .weldJrtJar(weldJrtModule)
-                                                   .showOutput(true)
-                                                   .build();
-            System.out.println("Added " + cds.archiveFile());
+        private Linker complete() {
+            LOG.info("Created " + imageDir);
+            return this;
         }
 
-        private Launcher parse(String... args) throws Exception {
+        private Linker parse(String... args) throws Exception {
             this.cmdLineArgs = args;
             for (int i = 0; i < args.length; i++) {
                 final String arg = args[i];
@@ -129,48 +130,43 @@ public class Main {
                 assertDir(appModulePath.getParent().resolve("libs"));
             }
 
-            classListFile = createClassListFile();
-
             imageDir = prepareImageDir();
 
             return this;
         }
 
-        Launcher buildPluginArguments() {
+        Linker buildHelidonPluginArguments() {
 
             // Tell our plugin where the main application module is.
             // NOTE: jlink quirk here, where the first argument cannot be named.
 
-            appendPluginArg(null, appModulePath);
+            appendHelidonPluginArg(null, appModulePath);
 
             // Tell our plugin where the weld-jrt.jar is
 
-            Path ourModule = getModulePath(getClass());
-            this.weldJrtModule = assertExists(ourModule.getParent().resolve(WELD_JRT_JAR_PATH));
-            appendPluginArg(HelidonPlugin.WELD_JRT_MODULE_KEY, weldJrtModule);
+            final Path ourModule = getModulePath(getClass());
+            final Path weldJrtModule = assertExists(ourModule.getParent().resolve(WELD_JRT_JAR_PATH));
+            appendHelidonPluginArg(HelidonPlugin.WELD_JRT_MODULE_KEY, weldJrtModule);
 
             // Tell our plugin what JDK to use
 
-            appendPluginArg(HelidonPlugin.JAVA_HOME_KEY, javaHome);
+            appendHelidonPluginArg(HelidonPlugin.JAVA_HOME_KEY, javaHome);
 
             // Tell our plugin where the patches live, if provided
 
             if (patchesDir != null) {
-                appendPluginArg(HelidonPlugin.PATCHES_DIR_KEY, patchesDir);
+                appendHelidonPluginArg(HelidonPlugin.PATCHES_DIR_KEY, patchesDir);
             }
-
-            // Tell our plugin where the class list file is
-
-            appendPluginArg(HelidonPlugin.CLASS_FILE_LIST_KEY, classListFile);
 
             return this;
         }
 
-        Launcher buildJlinkArguments() {
+        Linker buildJlinkArguments() {
 
-            // Tell jlink to use our plugin
+            // Tell jlink to use our plugins
 
-            addArgument("--" + HelidonPlugin.NAME + "=" + pluginArgs.toString());
+            addArgument("--" + HelidonPlugin.NAME + "=" + helidonPluginArgs.toString());
+            addArgument("--" + BootOrderPlugin.NAME);
 
             // Tell jlink to use our BootModulesPlugin instead of the SystemModulesPlugin
 
@@ -223,14 +219,18 @@ public class Main {
             return imageDir;
         }
 
-        private void appendPluginArg(String key, Path value) {
-            if (pluginArgs.length() > 0) {
-                pluginArgs.append(':');
+        private void appendHelidonPluginArg(String key, Path value) {
+            appendPluginArg(key, value, helidonPluginArgs);
+        }
+
+        private void appendPluginArg(String key, Path value, StringBuilder args) {
+            if (args.length() > 0) {
+                args.append(':');
             }
             if (key != null) {
-                pluginArgs.append(key).append('=');
+                args.append(key).append('=');
             }
-            pluginArgs.append(value);
+            args.append(value);
         }
 
         private static Path getModulePath(Class<?> moduleClass) {

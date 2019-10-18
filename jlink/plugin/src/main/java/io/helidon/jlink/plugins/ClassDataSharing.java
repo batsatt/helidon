@@ -47,7 +47,6 @@ public class ClassDataSharing {
     private final Path archiveFile;
     private final List<String> classList;
 
-
     public static Builder builder() {
         return new Builder();
     }
@@ -106,6 +105,7 @@ public class ClassDataSharing {
         private static final String MODULE_INFO_NAME = "module-info";
         private static final String BEAN_ARCHIVE_SCANNER = "org/jboss/weld/environment/deployment/discovery/BeanArchiveScanner";
         private static final String EOL = System.getProperty("line.separator");
+        private String moduleName;
         private Path applicationJar;
         private Path javaHome;
         private Path classListFile;
@@ -127,6 +127,11 @@ public class ClassDataSharing {
 
         public Builder applicationJar(Path applicationJar) {
             this.applicationJar = assertJar(requireNonNull(applicationJar));
+            return this;
+        }
+
+        public Builder moduleName(String moduleName) {
+            this.moduleName = requireNonNull(moduleName);
             return this;
         }
 
@@ -152,7 +157,11 @@ public class ClassDataSharing {
 
         public ClassDataSharing build() throws Exception {
             requireNonNull(javaHome, "java home required");
-            requireNonNull(applicationJar, "application jar required");
+            if (applicationJar == null && moduleName == null) {
+                throw new IllegalStateException("Either application jar or module name required");
+            } else if (applicationJar != null && moduleName != null) {
+                throw new IllegalStateException("Cannot specify both application jar and module name");
+            }
 
             if (classListFile == null) {
                 this.classListFile = tempFile(CLASS_LIST_FILE_SUFFIX);
@@ -195,21 +204,26 @@ public class ClassDataSharing {
         }
 
         private List<String> buildClassList() throws Exception {
-            execute("Building class list for " + applicationJar,
+            execute("Building class list for " + applicationJar, true, applicationJar.toString(),
                     XSHARE_OFF, XX_DUMP_LOADED_CLASS_LIST + classListFile);
             return loadClassList();
         }
 
         private void buildCdsArchive() throws Exception {
-            execute("Building CDS archive for " + applicationJar,
-                    XSHARE_DUMP, XX_SHARED_ARCHIVE_FILE + archiveFile, XX_SHARED_CLASS_LIST_FILE + classListFile);
+            if (applicationJar != null) {
+                execute("Building CDS archive for " + applicationJar, true, applicationJar.toString(),
+                        XSHARE_DUMP, XX_SHARED_ARCHIVE_FILE + archiveFile, XX_SHARED_CLASS_LIST_FILE + classListFile);
+            } else if (moduleName != null) {
+                execute("Building CDS archive for module " + moduleName, false, moduleName,
+                        XSHARE_DUMP, XX_SHARED_ARCHIVE_FILE + archiveFile, XX_SHARED_CLASS_LIST_FILE + classListFile);
+            }
         }
 
         private List<String> loadClassList() throws IOException {
             return Files.readAllLines(classListFile);
         }
 
-        private void execute(String action, String... jvmArgs) throws Exception {
+        private void execute(String action, boolean targetIsJar, String target, String... jvmArgs) throws Exception {
             LOG.info(showOutput ? (EOL + action + EOL) : action);
             final ProcessBuilder builder = new ProcessBuilder();
             final List<String> command = new ArrayList<>();
@@ -217,8 +231,8 @@ public class ClassDataSharing {
             command.add(javaPath().toString());
             command.add(EXIT_ON_STARTED);
             command.addAll(Arrays.asList(jvmArgs));
-            command.add("-jar");
-            command.add(applicationJar.toString());
+            command.add(targetIsJar ? "-jar" : "-m");
+            command.add(target);
             builder.command(command);
 
             final Process process = builder.start();

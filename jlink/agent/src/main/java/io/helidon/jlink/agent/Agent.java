@@ -41,9 +41,8 @@ public class Agent {
      * @throws Exception If an error occurs.
      */
     public static void premain(String agentArgs, Instrumentation inst) throws Exception {
-        System.out.println("BEGIN premain");
 
-        // Modify the  jdk.jlink module to export its plugin and internal packages to our module
+        // Modify the jdk.jlink module to export its plugin and internal packages to our module
 
         Module jlinkModule = findModule("jdk.jlink");
         Module helidonModule = findModule("helidon.jlink");
@@ -65,11 +64,11 @@ public class Agent {
 
         Class<?> pluginClass = loadClass(jlinkModule, "jdk.tools.jlink.plugin.Plugin");
         Class<?> helidonPluginClass = loadClass(helidonModule, "io.helidon.jlink.plugins.HelidonPlugin");
-        Class<?> bootPluginClass = loadClass(helidonModule, "io.helidon.jlink.plugins.BootModulesPlugin");
-        Map<Class<?>, List<Class<?>>> extraProvides = Map.of(pluginClass, List.of(helidonPluginClass, bootPluginClass));
+        Class<?> bootModulesPluginClass = loadClass(helidonModule, "io.helidon.jlink.plugins.BootModulesPlugin");
+        Class<?> bootOrderPluginClass = loadClass(helidonModule, "io.helidon.jlink.plugins.BootOrderPlugin");
+        Map<Class<?>, List<Class<?>>> extraProvides = Map.of(pluginClass, List.of(
+            helidonPluginClass, bootModulesPluginClass, bootOrderPluginClass));
         inst.redefineModule(helidonModule, emptySet(), emptyMap(), emptyMap(), emptySet(), extraProvides);
-
-        System.out.println("END premain");
     }
 
     private static Module findModule(String moduleName) {

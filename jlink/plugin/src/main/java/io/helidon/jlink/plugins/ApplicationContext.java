@@ -17,21 +17,95 @@
 package io.helidon.jlink.plugins;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static java.util.Objects.requireNonNull;
 
 /**
- * TODO: Describe
+ * Application context that is shared across components.
  */
-public interface ApplicationContext {
-    default boolean isAlternateJavaHome() {
+public abstract class ApplicationContext {
+    private static final AtomicReference<ApplicationContext> INSTANCE = new AtomicReference<>();
+
+    /**
+     * Set the context.
+     *
+     * @param context The context.
+     * @return The context.
+     */
+    static ApplicationContext set(ApplicationContext context) {
+        INSTANCE.set(requireNonNull(context));
+        return context;
+    }
+
+    /**
+     * Returns the content.
+     *
+     * @return The context.
+     */
+    public static ApplicationContext get() {
+        return requireNonNull(INSTANCE.get());
+    }
+
+    /**
+     * Tests whether or not we are targeting a Java Home other than the one we are running in.
+     *
+     * @return {@code true} if using an alternate.
+     */
+    public boolean isAlternateJavaHome() {
         return !javaHome().equals(Environment.JAVA_HOME);
     }
 
-    Path javaHome();
+    /**
+     * Returns the Java Home path.
+     *
+     * @return The path.
+     */
+    public abstract Path javaHome();
 
-    boolean isMicroprofile();
+    /**
+     * Returns whether or not the application uses Microprofile.
+     *
+     * @return {@code true} if using Microprofile.
+     */
+    public abstract boolean isMicroprofile();
 
-    boolean usesWeld();
+    /**
+     * Returns whether or not the application uses Weld. This should always return {@code true} if using Microprofile unless
+     * the Helidon CDI implementation changes.
+     *
+     * @return {@code true} if using Weld.
+     */
+    public abstract boolean usesWeld();
 
-    Map<String, DelegatingArchive> archivesByPackage();
+    /**
+     * Returns a map of all archives indexed by the packages they export.
+     *
+     * @return The index.
+     */
+    abstract Map<String, DelegatingArchive> archivesByPackage();
+
+    /**
+     * Returns the name of the application module.
+     *
+     * @return The name.
+     */
+    public abstract String applicationModuleName();
+
+    /**
+     * Returns the path to the class list file.
+     *
+     * @return The path.
+     */
+    public abstract Path classListFile();
+
+
+    /**
+     * Returns the class list.
+     *
+     * @return The list.
+     */
+    public abstract List<String> classList();
 }
