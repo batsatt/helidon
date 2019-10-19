@@ -81,6 +81,7 @@ public class BootOrderPlugin implements Plugin {
                                                  .findModule(JAVA_BASE)
                                                  .orElseThrow()
                                                  .entries()
+                                                 .filter(entry -> entry.type().equals(ResourcePoolEntry.Type.CLASS_OR_RESOURCE))
                                                  .filter(entry -> entry.path().endsWith(CLASS_SUFFIX))
                                                  .filter(entry -> entry.path().startsWith(SYSTEM_MODULES_PATH_PREFIX))
                                                  .map(entry -> {
@@ -97,21 +98,25 @@ public class BootOrderPlugin implements Plugin {
             throw new PluginException("Did not find " + SYSTEM_MODULE_FINDERS_PATH + " in class list");
         }
 
-        // Copy the boot classes first, remembering what we copied. This search assumes that the first module that
-        // contains the class is the one we want, but it could possibly be in another module; if that occurs, we
-        // just won't be optimized as much as possible.
+        // Find all the boot classes. This search assumes that the first module that contains the class is the one we want,
+        // but it could possibly be in another module; if that occurs, we just won't be optimized as much as possible.
 
         final Map<String, ResourcePoolEntry> bootEntries = new HashMap<>();
-        in.entries().forEach(entry -> {
-            final String modulePath = entry.path();
-            final int secondSlash = modulePath.indexOf('/', 1);
-            final String path = modulePath.substring(secondSlash + 1);
-            if (bootClassSet.contains(path)) {
-                if (!bootEntries.containsKey(path)) {
-                    bootEntries.put(path, entry);
-                }
-            }
-        });
+        in.entries()
+          .filter(entry -> entry.type().equals(ResourcePoolEntry.Type.CLASS_OR_RESOURCE))
+          .filter(entry -> entry.path().endsWith(CLASS_SUFFIX))
+          .forEach(entry -> {
+              final String modulePath = entry.path();
+              final int secondSlash = modulePath.indexOf('/', 1);
+              final String path = modulePath.substring(secondSlash + 1);
+              if (bootClassSet.contains(path)) {
+                  if (!bootEntries.containsKey(path)) {
+                      bootEntries.put(path, entry);
+                  }
+              }
+          });
+
+        // Copy the boot class entries in the order present in the boot class list
 
         final Set<String> copied = new HashSet<>();
         bootClassList.forEach(path -> {

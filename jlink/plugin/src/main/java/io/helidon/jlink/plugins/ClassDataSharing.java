@@ -114,6 +114,9 @@ public class ClassDataSharing {
         private boolean createArchive;
         private boolean showOutput;
         private Path weldJrtJar;
+        private String target;
+        private String targetOption;
+        private String targetDescription;
 
         private Builder() {
             this.createArchive = true;
@@ -157,10 +160,19 @@ public class ClassDataSharing {
 
         public ClassDataSharing build() throws Exception {
             requireNonNull(javaHome, "java home required");
+
             if (applicationJar == null && moduleName == null) {
                 throw new IllegalStateException("Either application jar or module name required");
             } else if (applicationJar != null && moduleName != null) {
                 throw new IllegalStateException("Cannot specify both application jar and module name");
+            } else if (applicationJar != null) {
+                this.targetOption = "-jar";
+                this.target = applicationJar.toString();
+                this.targetDescription = target;
+            } else {
+                this.targetOption = "-m";
+                this.target = moduleName;
+                this.targetDescription = "module " + target;
             }
 
             if (classListFile == null) {
@@ -204,34 +216,29 @@ public class ClassDataSharing {
         }
 
         private List<String> buildClassList() throws Exception {
-            execute("Building class list for " + applicationJar, true, applicationJar.toString(),
+            execute("Building startup class list for " + targetDescription,
                     XSHARE_OFF, XX_DUMP_LOADED_CLASS_LIST + classListFile);
             return loadClassList();
         }
 
         private void buildCdsArchive() throws Exception {
-            if (applicationJar != null) {
-                execute("Building CDS archive for " + applicationJar, true, applicationJar.toString(),
-                        XSHARE_DUMP, XX_SHARED_ARCHIVE_FILE + archiveFile, XX_SHARED_CLASS_LIST_FILE + classListFile);
-            } else if (moduleName != null) {
-                execute("Building CDS archive for module " + moduleName, false, moduleName,
-                        XSHARE_DUMP, XX_SHARED_ARCHIVE_FILE + archiveFile, XX_SHARED_CLASS_LIST_FILE + classListFile);
-            }
-        }
+            execute("Building CDS archive for " + targetDescription,
+                    XSHARE_DUMP, XX_SHARED_ARCHIVE_FILE + archiveFile, XX_SHARED_CLASS_LIST_FILE + classListFile);
+      }
 
         private List<String> loadClassList() throws IOException {
             return Files.readAllLines(classListFile);
         }
 
-        private void execute(String action, boolean targetIsJar, String target, String... jvmArgs) throws Exception {
-            LOG.info(showOutput ? (EOL + action + EOL) : action);
+        private void execute(String action, String... jvmArgs) throws Exception {
+            LOG.info(showOutput ? (action + EOL) : action);
             final ProcessBuilder builder = new ProcessBuilder();
             final List<String> command = new ArrayList<>();
 
             command.add(javaPath().toString());
             command.add(EXIT_ON_STARTED);
             command.addAll(Arrays.asList(jvmArgs));
-            command.add(targetIsJar ? "-jar" : "-m");
+            command.add(targetOption);
             command.add(target);
             builder.command(command);
 
