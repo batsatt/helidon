@@ -176,7 +176,6 @@ public class HelidonPlugin implements Plugin {
             LOG.info("\n%d App modules: %s\n", appArchives.size(), appArchives);
             collectPatchEntries();
             addEntries(out);
-            LOG.info("Building image");
             return out.build();
         } catch (Exception e) {
             throw new PluginException(e);

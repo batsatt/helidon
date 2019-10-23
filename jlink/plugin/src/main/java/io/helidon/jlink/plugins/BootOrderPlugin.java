@@ -64,6 +64,10 @@ public class BootOrderPlugin implements Plugin {
     @Override
     public ResourcePool transform(ResourcePool in, ResourcePoolBuilder out) {
         LOG.info("Sorting by application boot class order");
+
+        // TODO: Why compute classlist file in HelidonPlugin? Only required if Linker needs the file to create the
+        //       archive, but... we're no longer using it, so build the class list here.
+
         final ApplicationContext context = ApplicationContext.get();
         final List<String> bootClassList = context.classList().stream().map(n -> n + CLASS_SUFFIX).collect(toList());
         final Set<String> bootClassSet = new HashSet<>(bootClassList);
@@ -135,6 +139,7 @@ public class BootOrderPlugin implements Plugin {
           .filter(entry -> !copied.contains(entry.path()))
           .forEach(out::add);
 
+        LOG.info("Creating image");
         return out.build();
     }
 }

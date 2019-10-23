@@ -160,7 +160,6 @@ public class ClassDataSharing {
 
         public ClassDataSharing build() throws Exception {
             requireNonNull(javaHome, "java home required");
-
             if (applicationJar == null && moduleName == null) {
                 throw new IllegalStateException("Either application jar or module name required");
             } else if (applicationJar != null && moduleName != null) {
@@ -172,7 +171,7 @@ public class ClassDataSharing {
             } else {
                 this.targetOption = "-m";
                 this.target = moduleName;
-                this.targetDescription = "module " + target;
+                this.targetDescription = "module " + target + " in " + javaHome;
             }
 
             if (classListFile == null) {
@@ -224,7 +223,7 @@ public class ClassDataSharing {
         private void buildCdsArchive() throws Exception {
             execute("Building CDS archive for " + targetDescription,
                     XSHARE_DUMP, XX_SHARED_ARCHIVE_FILE + archiveFile, XX_SHARED_CLASS_LIST_FILE + classListFile);
-      }
+        }
 
         private List<String> loadClassList() throws IOException {
             return Files.readAllLines(classListFile);

@@ -34,7 +34,7 @@ init() {
     pluginModule=${mainModule}
     pluginPath=${pluginJar}
 
-    [[ -d ${patchesDir} ]] && appendVar appArgs "--patchesDir ${patchesDir}"
+    [[ -d ${patchesDir} ]] && appendVar appArgs "--patchesDir ${patchesDir}" || fail "${patchesDir} not found"
 
     while (( ${#} > 0 )); do
         case "${1}" in

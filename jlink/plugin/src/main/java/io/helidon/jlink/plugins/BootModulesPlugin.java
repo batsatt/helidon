@@ -157,7 +157,7 @@ public final class BootModulesPlugin implements Plugin {
 
     @Override
     public Set<State> getState() {
-        return enabled ? EnumSet.of(State.AUTO_ENABLED, State.FUNCTIONAL)
+        return enabled ? EnumSet.of(State.FUNCTIONAL)  // NOTE: AUTO_ENABLED caused configure to be called twice.
                        : EnumSet.of(State.DISABLED);
     }
 
@@ -184,6 +184,7 @@ public final class BootModulesPlugin implements Plugin {
         if (!enabled) {
             throw new PluginException(NAME + " was set");
         }
+        LOG.info("Generating SystemModule classes");
 
         // validate, transform (if needed), and add the module-info.class files
         List<ModuleInfo> moduleInfos = transformModuleInfos(in, out);
@@ -362,6 +363,7 @@ public final class BootModulesPlugin implements Plugin {
 
     static void storeClass(String className, byte[] classData) {  // TODO REMOVE
 /*
+
         final Path path = Paths.get("classes/" + className + ".class").toAbsolutePath();
         System.out.println("Storing " + path);
         try {
@@ -373,6 +375,7 @@ public final class BootModulesPlugin implements Plugin {
             throw new UncheckedIOException(e);
         }
 */
+
     }
 
     static class ModuleInfo {

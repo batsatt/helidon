@@ -18,6 +18,7 @@ package io.helidon.jlink;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -28,6 +29,7 @@ import java.util.spi.ToolProvider;
 
 import io.helidon.jlink.logging.Log;
 import io.helidon.jlink.plugins.ApplicationContext;
+import io.helidon.jlink.plugins.BootOrderPlugin;
 import io.helidon.jlink.plugins.ClassDataSharing;
 import io.helidon.jlink.plugins.HelidonPlugin;
 
@@ -67,6 +69,7 @@ public class Linker {
         this.javaHome = JAVA_HOME_DIR;
         this.helidonPluginArgs = new StringBuilder();
         this.jlink = ToolProvider.findFirst("jlink").orElseThrow();
+        System.setProperty("jlink.debug", "true"); // TODO
     }
 
     private Linker buildImage() {
@@ -74,6 +77,7 @@ public class Linker {
         if (result != 0) {
             throw new Error("Image creation failed.");
         }
+        LOG.info("Image created: %s", imageDir);
         return this;
     }
 
@@ -83,19 +87,17 @@ public class Linker {
             final ClassDataSharing cds = ClassDataSharing.builder()
                                                          .javaHome(imageDir)
                                                          .moduleName(context.applicationModuleName())
-                                                         //.classListFile(context.classListFile())
-                                                         .showOutput(true)
+                                                         .showOutput(false)
                                                          .build();
-            LOG.info("Added %s", cds.archiveFile());
+            LOG.info("Added CDS archive %s", cds.archiveFile());
         } catch (Exception e) {
             throw new PluginException(e);
         }
         return this;
     }
 
-    private Linker complete() {
-        LOG.info("Created " + imageDir);
-        return this;
+    private void complete() {
+        LOG.info("Done creating %s", imageDir);
     }
 
     private Linker parse(String... args) throws Exception {
@@ -104,7 +106,7 @@ public class Linker {
             final String arg = args[i];
             if (arg.startsWith("--")) {
                 if (arg.equalsIgnoreCase("--patchesDir")) {
-                    patchesDir = assertDir(Paths.get(argAt(++i)));
+                    patchesDir = assertNonEmptyDir(Paths.get(argAt(++i)));
                 } else if (arg.equalsIgnoreCase("--javaHome")) {
                     javaHome = assertDir(Paths.get(argAt(++i)));
                     assertDir(javaHome.resolve("jmods"));
@@ -122,6 +124,10 @@ public class Linker {
             }
         }
 
+        if (patchesDir == null) {
+            throw new IllegalArgumentException("patchesDir required");
+        }
+
         if (appModulePath == null) {
             throw new IllegalArgumentException("applicationModulePath required");
         } else {
@@ -133,7 +139,7 @@ public class Linker {
         return this;
     }
 
-    Linker buildHelidonPluginArguments() {
+    private Linker buildHelidonPluginArguments() {
 
         // Tell our plugin where the main application module is.
         // NOTE: jlink quirk here, where the first argument cannot be named.
@@ -159,13 +165,12 @@ public class Linker {
         return this;
     }
 
-    Linker buildJlinkArguments() {
+    private Linker buildJlinkArguments() {
 
         // Tell jlink to use our plugins
 
         addArgument("--" + HelidonPlugin.NAME + "=" + helidonPluginArgs.toString());
-// TODO! Breaks image! See ImageFileCreator line 235 and header+indices size differences with and without.
-//  addArgument("--" + BootOrderPlugin.NAME);
+        addArgument("--" + BootOrderPlugin.NAME);
 
         // Tell jlink to use our BootModulesPlugin instead of the SystemModulesPlugin
 
@@ -254,6 +259,18 @@ public class Linker {
             return cmdLineArgs[index];
         } else {
             throw new IllegalArgumentException("missing argument"); // TODO usage()
+        }
+    }
+
+    private static Path assertNonEmptyDir(Path dir) {
+        Path result = assertDir(dir);
+        try {
+            if (Files.list(dir).noneMatch(Files::isRegularFile)) {
+                throw new IllegalArgumentException("no files found in directory " + result);
+            }
+            return result;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 
