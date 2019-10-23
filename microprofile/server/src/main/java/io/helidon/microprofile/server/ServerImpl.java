@@ -16,7 +16,6 @@
 
 package io.helidon.microprofile.server;
 
-import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.file.Path;
@@ -571,10 +570,7 @@ public class ServerImpl implements Server {
     }
 
     private static void exitOnStarted() {
-        final long startMillis = System.currentTimeMillis() - ManagementFactory.getRuntimeMXBean().getStartTime();
-        final float startSeconds = startMillis / 1000F;
-        LOGGER.info(String.format("Exiting, -D%s set. Started in %.3f seconds (from JVM start time).",
-                                  EXIT_ON_STARTED_KEY, startSeconds));
+        LOGGER.info(String.format("Exiting, -D%s set.",  EXIT_ON_STARTED_KEY));
         System.exit(0);
     }
 

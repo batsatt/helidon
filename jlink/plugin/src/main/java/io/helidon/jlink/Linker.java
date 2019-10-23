@@ -97,7 +97,7 @@ public class Linker {
     }
 
     private void complete() {
-        LOG.info("Done creating %s", imageDir);
+        LOG.info("Image completed: %s", imageDir);
     }
 
     private Linker parse(String... args) throws Exception {
