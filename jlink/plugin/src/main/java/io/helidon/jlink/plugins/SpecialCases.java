@@ -77,7 +77,8 @@ public class SpecialCases {
     }
 
     /**
-     * Returns the (likely empty) set of additional requires for the given archive if it relies on Weld.
+     * Returns the (likely empty) set of additional requires for the given archive if it relies on Weld
+     * and this is an MP app.
      *
      * @param context The context.
      * @param archive The archive.
@@ -87,15 +88,16 @@ public class SpecialCases {
     public static Set<String> additionalWeldRequires(ApplicationContext context,
                                                      DelegatingArchive archive,
                                                      IndexView index) {
-        if (index != null && context.usesWeld() && archive.isAutomatic()) {
-            // TODO: see if we can refine this coarse grained approach by examining the index
-            return ADDITIONAL_WELD_REQUIRES;
-        } else if (archive.moduleName().startsWith(MICROPROFILE_MODULE_NAME_PREFIX)
-                   && archive.dependencies().stream().anyMatch(INJECT_MODULE_NAMES::contains)) {
-            // This is an MP module that uses injection, so add weld
-            return ADDITIONAL_WELD_REQUIRES;
+        if (context.isMicroprofile()) {
+            if (index != null && context.usesWeld() && archive.isAutomatic()) {
+                // TODO: see if we can refine this coarse grained approach by examining the index
+                return ADDITIONAL_WELD_REQUIRES;
+            } else if (archive.moduleName().startsWith(MICROPROFILE_MODULE_NAME_PREFIX)
+                       && archive.dependencies().stream().anyMatch(INJECT_MODULE_NAMES::contains)) {
+                // This is an MP module that uses injection, so add weld
+                return ADDITIONAL_WELD_REQUIRES;
+            }
         }
-
         return Collections.emptySet();
     }
 }

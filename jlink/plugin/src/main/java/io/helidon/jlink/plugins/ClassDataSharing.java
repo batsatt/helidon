@@ -139,7 +139,7 @@ public class ClassDataSharing {
         }
 
         public Builder weldJrtJar(Path weldJrtJar) {
-            this.weldJrtJar = assertJar(weldJrtJar);
+            this.weldJrtJar = weldJrtJar == null ? null : assertJar(weldJrtJar);
             return this;
         }
 
