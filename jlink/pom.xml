@@ -26,7 +26,7 @@
     <modules>
         <module>agent</module>
         <module>weld</module>
-        <module>plugin</module>
+        <module>jlink</module>
     </modules>
 
     <dependencyManagement>

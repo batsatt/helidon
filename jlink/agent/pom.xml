@@ -26,7 +26,7 @@
                     <finalName>${artifactId}</finalName>
                     <archive>
                         <manifestEntries>
-                            <Premain-Class>io.helidon.jlink.agent.Agent</Premain-Class>
+                            <Premain-Class>io.helidon.jlink.image.modules.agent.Agent</Premain-Class>
                         </manifestEntries>
                     </archive>
                 </configuration>

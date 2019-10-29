@@ -11,7 +11,7 @@ usage() {
 
 main() {
     init "$@"
-    ${javaHome}/bin/java ${jvmArgs} -javaagent:${agentJar} --module-path ${pluginPath} --module ${pluginModule} ${appArgs}
+    ${javaHome}/bin/java ${jvmArgs} -javaagent:${agentJar} --module-path ${jlinkPath} --module ${jlinkModule} ${appArgs}
 }
 
 init() {
@@ -19,20 +19,20 @@ init() {
     readonly binDir=$(dirname "${0}")
     readonly rootDir=$(cd "${binDir}"/..; pwd)
     readonly agentJar="${rootDir}/agent/target/helidon-jlink-agent.jar"
-    readonly pluginJar="${rootDir}/plugin/target/helidon-jlink.jar"
-    readonly pluginLibs="${rootDir}/plugin/target/libs"
-    readonly pluginDir="${rootDir}/plugin/target/classes"
+    readonly jlinkJar="${rootDir}/jlink/target/helidon-jlink.jar"
+    readonly jlinkLibs="${rootDir}/jlink/target/libs"
+    readonly jlinkDir="${rootDir}/jlink/target/classes"
     readonly patchesDir="${rootDir}/etc/patches"
     readonly mainModule="helidon.jlink"
-    readonly mainClass="io.helidon.jlink.Linker"
+    readonly mainClass="io.helidon.jlink.image.modules.Linker"
 
     [[ ${JAVA_11_HOME} ]] && javaHome=${JAVA_11_HOME} || javaHome=${JAVA_HOME}
 
     assertExists "${javaHome}/bin/java"
     assertExists ${agentJar}
-    assertExists ${pluginJar}
-    pluginModule=${mainModule}
-    pluginPath=${pluginJar}
+    assertExists ${jlinkJar}
+    jlinkModule=${mainModule}
+    jlinkPath=${jlinkJar}
 
     [[ -d ${patchesDir} ]] && appendVar appArgs "--patchesDir ${patchesDir}" || fail "${patchesDir} not found"
 
@@ -40,12 +40,12 @@ init() {
         case "${1}" in
             -h | --help) usage ;;
             -d | --debug) setDebug ;;
-            --dir) pluginPath=${pluginDir}; pluginModule="${mainModule}/${mainClass}" ;;
+            --dir) jlinkPath=${jlinkDir}; jlinkModule="${mainModule}/${mainClass}" ;;
             *) appendVar appArgs ${1} ;;
         esac
         shift
     done
-    pluginPath+=":${pluginLibs}"
+    jlinkPath+=":${jlinkLibs}"
 }
 
 setDebug() {
