@@ -22,7 +22,9 @@ import java.lang.module.ModuleDescriptor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -50,7 +52,7 @@ public class JavaHome {
     private final Runtime.Version version;
     private final Path jmodsDir;
     private final List<Path> jmodFiles;
-    private final Set<String> moduleNames;
+    private final Map<String, Path> modules;
 
     public JavaHome() {
         this(CURRENT_JAVA_HOME_DIR);
@@ -67,17 +69,14 @@ public class JavaHome {
             this.jmodFiles = listFiles(jmodsDir, fileName -> fileName.endsWith(JMOD_SUFFIX));
 
             this.version = isCurrent() ? Runtime.version() : findVersion();
-            this.moduleNames = jmodFiles.stream()
-                                        .map(path -> {
-                                            final String fileName = path.getFileName().toString();
-                                            return fileName.substring(0, fileName.length() - JMOD_SUFFIX.length());
-                                        }).collect(Collectors.toSet());
+            this.modules = jmodFiles.stream()
+                                    .collect(Collectors.toMap(JavaHome::moduleNameOf, Function.identity()));
         } else if (version == null) {
             throw new IllegalArgumentException("version required in a java home without jmods dir");
         } else {
             this.version = version;
             this.jmodFiles = List.of();
-            this.moduleNames = Set.of();
+            this.modules = Map.of();
         }
     }
 
@@ -105,7 +104,15 @@ public class JavaHome {
     }
 
     public Set<String> moduleNames() {
-        return moduleNames;
+        return modules.keySet();
+    }
+
+    public Path jmodFile(String moduleName) {
+        final Path result = modules.get(moduleName);
+        if (result == null) {
+            throw new IllegalStateException("cannot find jmod file for module '" + moduleName + "' in " + path());
+        }
+        return result;
     }
 
     public Path applicationDir() {
@@ -132,5 +139,10 @@ public class JavaHome {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    private static String moduleNameOf(Path jmodFile) {
+        final String fileName = jmodFile.getFileName().toString();
+        return fileName.substring(0, fileName.length() - JMOD_SUFFIX.length());
     }
 }

@@ -33,13 +33,14 @@ import static io.helidon.jlink.common.util.FileUtils.CURRENT_JAVA_HOME_DIR;
  * Create a JDK image by finding the JDK modules required of a Helidon application and linking
  * them via jlink, then adding the jars and a CDS archive.
  */
-public class Linker {
-    private static final Log LOG = Log.getLog("linker");
+public class JarsLinker {
+    private static final Log LOG = Log.getLog("jars-linker");
     private static final String JLINK_TOOL_NAME = "jlink";
     private final ToolProvider jlink;
     private final List<String> jlinkArgs;
     private String[] cmdLineArgs;
     private boolean stripDebug;
+    private boolean verbose;
     private JavaHome javaHome;
     private Path appJar;
     private Path imageDir;
@@ -49,42 +50,47 @@ public class Linker {
     private Path imageApplicationJar;
 
     public static void main(String... args) throws Exception {
-        new Linker().parse(args)
-                    .buildApplication()
-                    .collectJdkDependencies()
-                    .buildJlinkArguments()
-                    .buildImage()
-                    .copyJars()
-                    .addCdsArchive()
-                    .complete();
+        link(args);
     }
 
-    private Linker() {
+    static Path link(String... args) throws Exception {
+        final JarsLinker linker = new JarsLinker().configure(args)
+                                                  .buildApplication()
+                                                  .collectJdkDependencies()
+                                                  .buildJlinkArguments()
+                                                  .buildImage()
+                                                  .copyJars()
+                                                  .addCdsArchive()
+                                                  .complete();
+        return linker.imageDir;
+    }
+
+    private JarsLinker() {
         this.jlink = ToolProvider.findFirst(JLINK_TOOL_NAME).orElseThrow();
         this.jlinkArgs = new ArrayList<>();
         System.setProperty("jlink.debug", "true"); // TODO
     }
 
-    private void complete() {
+    private JarsLinker complete() {
         LOG.info("Image completed: %s", imageDir);
+        return this;
     }
 
-    private Linker addCdsArchive() {
+    private JarsLinker addCdsArchive() {
         try {
-            final ClassDataSharing cds = ClassDataSharing.builder()
-                                                         .javaHome(imageHome.path())
-                                                         .applicationJar(imageApplicationJar)
-                                                         .showOutput(true)
-                                                         .build();
-            LOG.info("Added CDS archive %s", cds.archiveFile());
+            ClassDataSharing.builder()
+                            .javaHome(imageHome.path())
+                            .applicationJar(imageApplicationJar)
+                            .showOutput(verbose)
+                            .build();
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
         return this;
     }
 
-    private Linker copyJars() {
-        LOG.info("Copying application jars to %s", imageDir);
+    private JarsLinker copyJars() {
+        LOG.info("Copying %d application jars to %s", application.applicationLibJars().size() + 1, imageDir);
         final Path appDir = imageHome.applicationDir();
         final Path appLibsDir = imageHome.applicationLibsDir();
         this.imageApplicationJar = application.applicationJar().copyToDirectory(appDir);
@@ -92,18 +98,17 @@ public class Linker {
         return this;
     }
 
-
-    private Linker buildImage() {
+    private JarsLinker buildImage() {
+        LOG.info("Building image: %s", imageDir);
         final int result = jlink.run(System.out, System.err, jlinkArgs.toArray(new String[0]));
         if (result != 0) {
             throw new Error("Image creation failed.");
         }
         imageHome = new JavaHome(imageDir, javaHome.version());
-        LOG.info("Image created: %s", imageDir);
         return this;
     }
 
-    private Linker buildJlinkArguments() {
+    private JarsLinker buildJlinkArguments() {
 
         // Tell jlink which jdk modules to include
 
@@ -125,18 +130,21 @@ public class Linker {
         return this;
     }
 
-    private Linker collectJdkDependencies() {
+    private JarsLinker collectJdkDependencies() {
+        LOG.info("Collecting JDK module dependencies");
         final JdkDependencies dependencies = new JdkDependencies(javaHome);
         this.jdkDependencies = dependencies.collect(application.jars());
+        LOG.info("JDK module dependencies: %s", String.join(", ", jdkDependencies));
         return this;
     }
 
-    private Linker buildApplication() {
+    private JarsLinker buildApplication() {
+        LOG.info("Loading application jars");
         this.application = new Application(javaHome, appJar);
         return this;
     }
 
-    private Linker parse(String... args) throws Exception {
+    private JarsLinker configure(String... args) throws Exception {
         Path javaHomeDir = CURRENT_JAVA_HOME_DIR;
         this.cmdLineArgs = args;
         for (int i = 0; i < args.length; i++) {
@@ -148,6 +156,8 @@ public class Linker {
                     imageDir = Paths.get(argAt(++i));
                 } else if (arg.equalsIgnoreCase("--strip-debug")) {
                     stripDebug = true;
+                } else if (arg.equalsIgnoreCase("--verbose")) {
+                    verbose = true;
                 } else {
                     throw new IllegalArgumentException("Unknown argument: " + arg);
                 }

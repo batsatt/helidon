@@ -328,7 +328,7 @@ public class HelidonPlugin implements Plugin {
                             if (!entry.getName().equals(MANIFEST_PATH)) {
                                 jar.putNextEntry(new JarEntry(entry.getName()));
                                 if (!entry.isDirectory()) {
-                                    StreamUtils.copy(jarFile.getInputStream(entry), jar);
+                                    StreamUtils.transfer(jarFile.getInputStream(entry), jar);
                                 }
                                 jar.flush();
                                 jar.closeEntry();

@@ -62,7 +62,20 @@ public class JdkDependencies {
                 addJar(jar);
             }
         });
-        return dependencies;
+
+        final Set<String> closure = new HashSet<>();
+        dependencies.forEach(moduleName -> addDependency(moduleName, closure));
+        return closure;
+    }
+
+    private void addDependency(String moduleName, Set<String> result) {
+        if (!result.contains(moduleName)) {
+            result.add(moduleName);
+            final Jar jar = new Jar(javaHome.jmodFile(moduleName), false);
+            jar.moduleDescriptor().requires().forEach(r -> {
+                addDependency(r.name(), result);
+            });
+        }
     }
 
     private void addModule(Jar module) {

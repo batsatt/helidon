@@ -38,7 +38,7 @@ import io.helidon.jlink.common.logging.Log;
 import static java.util.Objects.requireNonNull;
 
 /**
- * TODO: Describe
+ * A builder for a CDS archive.
  */
 public class ClassDataSharing {
     private final Path applicationJar;
@@ -87,12 +87,11 @@ public class ClassDataSharing {
 
     public static class Builder {
         private static final Log LOG = Log.getLog("class-data-sharing");
-        private static final String FILE_PREFIX = "helidon";
+        private static final String FILE_PREFIX = "server";
         private static final String CLASS_LIST_FILE_SUFFIX = ".classlist";
         private static final String JAR_SUFFIX = ".jar";
         private static final String FILE_SEP = File.separator;
         private static final String JAVA_CMD_PATH = "bin" + FILE_SEP + "java";
-        private static final ExecutorService EXECUTOR = ForkJoinPool.commonPool();
         private static final String XSHARE_OFF = "-Xshare:off";
         private static final String XSHARE_DUMP = "-Xshare:dump";
         private static final String XX_DUMP_LOADED_CLASS_LIST = "-XX:DumpLoadedClassList=";
@@ -100,14 +99,16 @@ public class ClassDataSharing {
         private static final String XX_SHARED_CLASS_LIST_FILE = "-XX:SharedClassListFile=";
         private static final String EXIT_ON_STARTED = "-Dexit.on.started";
         private static final String LIB_DIR_NAME = "lib";
-        private static final String ARCHIVE_NAME = "helidon.jsa";
+        private static final String ARCHIVE_NAME = FILE_PREFIX + ".jsa";
         private static final String CLASS_SUFFIX = ".class";
         private static final String MODULE_INFO_NAME = "module-info";
         private static final String BEAN_ARCHIVE_SCANNER = "org/jboss/weld/environment/deployment/discovery/BeanArchiveScanner";
         private static final String EOL = System.getProperty("line.separator");
+        private static final ExecutorService EXECUTOR = ForkJoinPool.commonPool();
+        private Path javaHome;
+        private String archiveDir;
         private String moduleName;
         private Path applicationJar;
-        private Path javaHome;
         private Path classListFile;
         private Path archiveFile;
         private List<String> classList;
@@ -120,6 +121,7 @@ public class ClassDataSharing {
 
         private Builder() {
             this.createArchive = true;
+            this.archiveDir = LIB_DIR_NAME;
         }
 
         public Builder javaHome(Path javaHome) {
@@ -129,12 +131,22 @@ public class ClassDataSharing {
         }
 
         public Builder applicationJar(Path applicationJar) {
-            this.applicationJar = assertJar(requireNonNull(applicationJar));
+            if (requireNonNull(applicationJar).isAbsolute()) {
+                this.applicationJar = assertJar(applicationJar);
+            } else {
+
+                this.applicationJar = assertJar(javaHome.resolve(applicationJar));
+            }
             return this;
         }
 
         public Builder moduleName(String moduleName) {
             this.moduleName = requireNonNull(moduleName);
+            return this;
+        }
+
+        public Builder archiveFile(Path archiveFile) {
+            this.archiveFile = requireNonNull(archiveFile);
             return this;
         }
 
@@ -184,8 +196,9 @@ public class ClassDataSharing {
             updateClassList();
 
             if (createArchive) {
-                final Path libsDir = Builder.assertDir(requireNonNull(javaHome).resolve(LIB_DIR_NAME));
-                this.archiveFile = libsDir.resolve(ARCHIVE_NAME);
+                if (archiveFile == null) {
+                    archiveFile = assertDir(javaHome.resolve(archiveDir)).resolve(ARCHIVE_NAME);
+                }
                 buildCdsArchive();
             }
 
@@ -240,6 +253,8 @@ public class ClassDataSharing {
             command.add(targetOption);
             command.add(target);
             builder.command(command);
+
+            builder.directory(javaHome.toFile());
 
             final Process process = builder.start();
             final StreamConsumer out = new StreamConsumer(process.getInputStream(), showOutput);

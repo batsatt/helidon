@@ -26,6 +26,7 @@ import java.io.UncheckedIOException;
 import java.lang.module.ModuleDescriptor;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.Iterator;
 import java.util.Spliterator;
 import java.util.Spliterators;
@@ -36,6 +37,7 @@ import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import java.util.zip.ZipEntry;
 
 import io.helidon.jlink.common.logging.Log;
 import io.helidon.jlink.common.util.StreamUtils;
@@ -50,18 +52,24 @@ import static io.helidon.jlink.common.util.FileUtils.assertDir;
 import static io.helidon.jlink.common.util.FileUtils.assertFile;
 
 /**
- * CDI BeansArchive aware Jar. Supports creating an index if missing and adding it during copy.
+ * CDI BeansArchive aware jar wrapper. Supports creating an index if missing and adding it during copy.
  */
 public class Jar {
     private static final Log LOG = Log.getLog("jar");
+    private static final String JMOD_SUFFIX = ".jmod";
     private static final String BEANS_PATH = "META-INF/beans.xml";
     private static final String JANDEX_INDEX_PATH = "META-INF/jandex.idx";
     private static final String CLASS_FILE_SUFFIX = ".class";
+    private static final String JMOD_CLASSES_PREFIX = "classes/";
     private static final String MODULE_INFO_CLASS = "module-info.class";
+    private static final String SIGNATURE_PREFIX = "META-INF/";
+    private static final String SIGNATURE_SUFFIX = ".SF";
     private final Path path;
+    private final boolean isJmod;
     private final JarFile jar;
     private final boolean isMultiRelease;
     private final boolean isBeansArchive;
+    private final boolean isSigned;
     private final Index index;
     private final boolean builtIndex;
     private final ModuleDescriptor descriptor;
@@ -85,13 +93,14 @@ public class Jar {
         }
     }
 
-    public Jar(Path path) {
-        final String fileName = assertFile(path).getFileName().toString();
-        this.path = path;
+    public Jar(Path path, boolean addIndexIfMissing) {
+        this.path = assertFile(path);
+        this.isJmod = path.getFileName().toString().endsWith(JMOD_SUFFIX);
         try {
             this.jar = new JarFile(path.toFile());
-            this.isMultiRelease = isMultiRelease(jar.getManifest());
-            this.isBeansArchive = hasEntry(BEANS_PATH);
+            this.isMultiRelease = !isJmod && isMultiRelease(jar.getManifest());
+            this.isSigned = !isJmod && hasSignatureFile();
+            this.isBeansArchive = !isJmod && hasEntry(BEANS_PATH);
             final boolean hasIndex = isBeansArchive && hasEntry(JANDEX_INDEX_PATH);
             Index index = null;
             boolean builtIndex = false;
@@ -101,13 +110,17 @@ public class Jar {
                 if (hasIndex) {
                     index = loadIndex();
                 }
-                if (index == null) {
-                    index = buildIndex();
-                    builtIndex = true;
+                if (index == null && addIndexIfMissing) {
+                    if (isSigned) {
+                        LOG.warn("Cannot add Jandex index to signed jar %s", name());
+                    } else {
+                        index = buildIndex();
+                        builtIndex = true;
+                    }
                 }
             }
 
-            final Entry moduleInfo = findEntry(MODULE_INFO_CLASS);
+            final Entry moduleInfo = findEntry(isJmod ? JMOD_CLASSES_PREFIX + MODULE_INFO_CLASS : MODULE_INFO_CLASS);
             if (moduleInfo != null) {
                 descriptor = ModuleDescriptor.read(moduleInfo.data());
             }
@@ -133,6 +146,10 @@ public class Jar {
         final Iterator<JarEntry> iterator = jar.entries().asIterator();
         return StreamSupport.stream(Spliterators.spliteratorUnknownSize(iterator, Spliterator.ORDERED), false)
                             .map(Entry::new);
+    }
+
+    public boolean isSigned() {
+        return isSigned;
     }
 
     public boolean isMultiRelease() {
@@ -165,7 +182,7 @@ public class Jar {
             if (builtIndex) {
                 copyAndAddIndex(out);
             } else {
-                StreamUtils.copy(Files.newInputStream(path), out);
+                StreamUtils.transfer(Files.newInputStream(path), out);
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -173,8 +190,13 @@ public class Jar {
         return targetFile;
     }
 
+    @Override
+    public String toString() {
+        return isSigned ? name() + " (signed)" : name();
+    }
+
     private Index loadIndex() {
-        LOG.debug("Loading Jandex index for %s", name());
+        LOG.debug("Loading Jandex index for %s", this);
         try (InputStream in = getEntry(JANDEX_INDEX_PATH).data()) {
             return new IndexReader(in).read();
         } catch (IllegalArgumentException e) {
@@ -188,16 +210,23 @@ public class Jar {
     }
 
     private Index buildIndex() {
-        LOG.info("Building Jandex index for %s", name());
+        LOG.info("Building index for CDI beans archive %s", this);
         final Indexer indexer = new Indexer();
         classEntries().forEach(entry -> {
             try {
                 indexer.index(entry.data());
             } catch (IOException e) {
-                LOG.warn("Could not index class %s in %s: %s", entry.path(), name(), e.getMessage());
+                LOG.warn("Could not index class %s in %s: %s", entry.path(), this, e.getMessage());
             }
         });
         return indexer.complete();
+    }
+
+    private boolean hasSignatureFile() {
+        return entries().anyMatch(e -> {
+            final String path = e.path();
+            return path.startsWith(SIGNATURE_PREFIX) && path.endsWith(SIGNATURE_SUFFIX);
+        });
     }
 
     private boolean hasEntry(String path) {
@@ -234,9 +263,9 @@ public class Jar {
             entries().filter(e -> !e.path().equals(JANDEX_INDEX_PATH))
                      .forEach(entry -> {
                          try {
-                             jar.putNextEntry(new JarEntry(entry.getName()));
+                             jar.putNextEntry(newJarEntry(entry));
                              if (!entry.isDirectory()) {
-                                 StreamUtils.copy(entry.data(), jar);
+                                 StreamUtils.transfer(entry.data(), jar);
                              }
                              jar.flush();
                              jar.closeEntry();
@@ -247,14 +276,39 @@ public class Jar {
         }
     }
 
+    private static JarEntry newJarEntry(Entry entry) {
+        final JarEntry result = new JarEntry(entry.getName());
+        if (result.getCreationTime() != null) {
+            result.setCreationTime(entry.getCreationTime());
+        }
+        if (result.getLastModifiedTime() != null) {
+            result.setLastModifiedTime(entry.getLastModifiedTime());
+        }
+        if (entry.getExtra() != null) {
+            result.setExtra(entry.getExtra());
+        }
+        if (result.getComment() != null) {
+            result.setComment(entry.getComment());
+        }
+        if (!entry.isDirectory()) {
+            final int method = entry.getMethod();
+            if (method == JarEntry.STORED || method == ZipEntry.DEFLATED) {
+                result.setMethod(method);
+            }
+        }
+        return result;
+    }
+
     private void addIndex(JarOutputStream jar) {
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
         final IndexWriter writer = new IndexWriter(out);
         try {
             writer.write(index);
             final ByteArrayInputStream data = new ByteArrayInputStream(out.toByteArray());
-            jar.putNextEntry(new JarEntry(JANDEX_INDEX_PATH));
-            StreamUtils.copy(data, jar);
+            final JarEntry entry = new JarEntry(JANDEX_INDEX_PATH);
+            entry.setLastModifiedTime(FileTime.fromMillis(System.currentTimeMillis()));
+            jar.putNextEntry(entry);
+            StreamUtils.transfer(data, jar);
             jar.flush();
             jar.closeEntry();
         } catch (IOException e) {

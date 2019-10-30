@@ -2,16 +2,28 @@
 
 usage() {
     println
-    println "Build a custom JRE image from an application module."
+    println "Build a custom JRE image from an application."
     println
-    println "Usage: ${scriptName} [--debug] [--dir] <applicationModulePath>"
+    println "Usage: ${scriptName} [--debug] [--dir] [--jars] <applicationJarPath>"
     println
     exit 0
 }
 
 main() {
     init "$@"
+    if [[ ${jars} ]]; then
+        linkJars
+    else
+        linkModules
+    fi
+}
+
+linkModules() {
     ${javaHome}/bin/java ${jvmArgs} -javaagent:${agentJar} --module-path ${jlinkPath} --module ${jlinkModule} ${appArgs}
+}
+
+linkJars() {
+    ${javaHome}/bin/java ${jvmArgs}  -cp ${jlinkPath} ${jarsMainClass} ${appArgs}
 }
 
 init() {
@@ -21,10 +33,12 @@ init() {
     readonly agentJar="${rootDir}/agent/target/helidon-jlink-agent.jar"
     readonly jlinkJar="${rootDir}/jlink/target/helidon-jlink.jar"
     readonly jlinkLibs="${rootDir}/jlink/target/libs"
+    readonly jandexJar="${jlinkLibs}/jandex.jar"
     readonly jlinkDir="${rootDir}/jlink/target/classes"
     readonly patchesDir="${rootDir}/etc/patches"
     readonly mainModule="helidon.jlink"
-    readonly mainClass="io.helidon.jlink.image.modules.Linker"
+    readonly modulesMainClass="io.helidon.jlink.image.modules.Linker"
+    readonly jarsMainClass="io.helidon.jlink.image.jars.JarsLinker"
 
     [[ ${JAVA_11_HOME} ]] && javaHome=${JAVA_11_HOME} || javaHome=${JAVA_HOME}
 
@@ -33,19 +47,29 @@ init() {
     assertExists ${jlinkJar}
     jlinkModule=${mainModule}
     jlinkPath=${jlinkJar}
-
-    [[ -d ${patchesDir} ]] && appendVar appArgs "--patchesDir ${patchesDir}" || fail "${patchesDir} not found"
+    unset jars
+    unset dir
 
     while (( ${#} > 0 )); do
         case "${1}" in
             -h | --help) usage ;;
             -d | --debug) setDebug ;;
-            --dir) jlinkPath=${jlinkDir}; jlinkModule="${mainModule}/${mainClass}" ;;
+            --jars) jars=true ;;
+            --dir) dir=true ;;
             *) appendVar appArgs ${1} ;;
         esac
         shift
     done
-    jlinkPath+=":${jlinkLibs}"
+
+    if [[ ${jars} ]]; then
+        [[ ${dir} ]] && jlinkPath=${jlinkDir}
+        jlinkPath+=":${jandexJar}"
+    else
+        [[ -d ${patchesDir} ]] && appendVar appArgs "--patchesDir ${patchesDir}" || fail "${patchesDir} not found"
+        [[ ${dir} ]] && jlinkModule="${mainModule}/${modulesMainClass}"
+        [[ ${dir} ]] && jlinkPath=${jlinkDir}
+        jlinkPath+=":${jlinkLibs}"
+    fi
 }
 
 setDebug() {

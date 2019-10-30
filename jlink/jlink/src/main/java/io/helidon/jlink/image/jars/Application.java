@@ -34,21 +34,29 @@ public class Application {
     private static final Log LOG = Log.getLog("application");
     private static final String LIBS_DIR = "libs";
     private static final String JAR_SUFFIX = ".jar";
+    private static final String MP_FILE_PREFIX = "helidon-microprofile";
     private final JavaHome targetJdk;
     private final Jar appJar;
     private final List<Jar> libJars;
+    private final boolean isMicroprofile;
 
     public Application(JavaHome targetJdk, Path applicationJar) {
         this.targetJdk = requireNonNull(targetJdk);
-        this.appJar = new Jar(applicationJar);
         final Path libDir = assertDir(applicationJar.getParent().resolve(LIBS_DIR));
+        final List<Path> libs = listFiles(libDir, fileName -> fileName.endsWith(JAR_SUFFIX));
+        this.isMicroprofile = libs.stream().anyMatch(e -> e.getFileName().toString().startsWith(MP_FILE_PREFIX));
+        this.appJar = new Jar(applicationJar, isMicroprofile);
         this.libJars = listFiles(libDir, fileName -> fileName.endsWith(JAR_SUFFIX)).stream()
-                                                                                   .map(Jar::new)
+                                                                                   .map(path -> new Jar(path, isMicroprofile))
                                                                                    .collect(Collectors.toList());
     }
 
     public JavaHome targetJdk() {
         return targetJdk;
+    }
+
+    public boolean isMicroprofile() {
+        return isMicroprofile;
     }
 
     public Jar applicationJar() {

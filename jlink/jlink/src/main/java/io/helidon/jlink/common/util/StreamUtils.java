@@ -26,7 +26,7 @@ import java.io.OutputStream;
 public class StreamUtils {
     private static final byte[] BUFFER = new byte[8196];
 
-    public static void copy(InputStream in, OutputStream out) throws IOException {
+    public static void transfer(InputStream in, OutputStream out) throws IOException {
         synchronized (BUFFER) {
             try (InputStream data = in) {
                 int bytesRead;
