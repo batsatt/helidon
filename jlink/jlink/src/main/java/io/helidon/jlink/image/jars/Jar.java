@@ -23,14 +23,17 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
+import java.lang.module.ModuleDescriptor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
+import java.util.jar.Manifest;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -44,6 +47,7 @@ import org.jboss.jandex.Indexer;
 import org.jboss.jandex.UnsupportedVersion;
 
 import static io.helidon.jlink.common.util.FileUtils.assertDir;
+import static io.helidon.jlink.common.util.FileUtils.assertFile;
 
 /**
  * CDI BeansArchive aware Jar. Supports creating an index if missing and adding it during copy.
@@ -54,12 +58,13 @@ public class Jar {
     private static final String JANDEX_INDEX_PATH = "META-INF/jandex.idx";
     private static final String CLASS_FILE_SUFFIX = ".class";
     private static final String MODULE_INFO_CLASS = "module-info.class";
-    private final String name;
     private final Path path;
     private final JarFile jar;
+    private final boolean isMultiRelease;
     private final boolean isBeansArchive;
     private final Index index;
     private final boolean builtIndex;
+    private final ModuleDescriptor descriptor;
 
     public class Entry extends JarEntry {
 
@@ -68,7 +73,7 @@ public class Jar {
         }
 
         public String path() {
-            return name();
+            return getName();
         }
 
         public InputStream data() {
@@ -81,16 +86,16 @@ public class Jar {
     }
 
     public Jar(Path path) {
-        final String fileName = path.getFileName().toString();
-        final int lastDot = fileName.lastIndexOf('.');
-        this.name = lastDot < 0 ? fileName : fileName.substring(0, lastDot);
+        final String fileName = assertFile(path).getFileName().toString();
         this.path = path;
         try {
             this.jar = new JarFile(path.toFile());
+            this.isMultiRelease = isMultiRelease(jar.getManifest());
             this.isBeansArchive = hasEntry(BEANS_PATH);
             final boolean hasIndex = isBeansArchive && hasEntry(JANDEX_INDEX_PATH);
             Index index = null;
             boolean builtIndex = false;
+            ModuleDescriptor descriptor = null;
 
             if (isBeansArchive) {
                 if (hasIndex) {
@@ -101,15 +106,23 @@ public class Jar {
                     builtIndex = true;
                 }
             }
+
+            final Entry moduleInfo = findEntry(MODULE_INFO_CLASS);
+            if (moduleInfo != null) {
+                descriptor = ModuleDescriptor.read(moduleInfo.data());
+            }
+
             this.index = index;
             this.builtIndex = builtIndex;
+            this.descriptor = descriptor;
+
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
     }
 
     public String name() {
-        return name;
+        return path.getFileName().toString();
     }
 
     public Path path() {
@@ -122,12 +135,24 @@ public class Jar {
                             .map(Entry::new);
     }
 
+    public boolean isMultiRelease() {
+        return isMultiRelease;
+    }
+
     public boolean isBeansArchive() {
         return isBeansArchive;
     }
 
     public boolean hasIndex() {
         return isBeansArchive && index != null;
+    }
+
+    public boolean hasModuleDescriptor() {
+        return descriptor != null;
+    }
+
+    public ModuleDescriptor moduleDescriptor() {
+        return descriptor;
     }
 
     public Path copyToDirectory(Path dir) {
@@ -149,7 +174,7 @@ public class Jar {
     }
 
     private Index loadIndex() {
-        LOG.debug("Loading Jandex index for %s", name);
+        LOG.debug("Loading Jandex index for %s", name());
         try (InputStream in = getEntry(JANDEX_INDEX_PATH).data()) {
             return new IndexReader(in).read();
         } catch (IllegalArgumentException e) {
@@ -163,13 +188,13 @@ public class Jar {
     }
 
     private Index buildIndex() {
-        LOG.info("Building Jandex index for %s", name);
+        LOG.info("Building Jandex index for %s", name());
         final Indexer indexer = new Indexer();
         classEntries().forEach(entry -> {
             try {
                 indexer.index(entry.data());
             } catch (IOException e) {
-                LOG.warn("Could not index class %s in %s: %s", entry.path(), name, e.getMessage());
+                LOG.warn("Could not index class %s in %s: %s", entry.path(), name(), e.getMessage());
             }
         });
         return indexer.complete();
@@ -177,6 +202,11 @@ public class Jar {
 
     private boolean hasEntry(String path) {
         return entries().anyMatch(entry -> entry.path().equals(path));
+    }
+
+    private Entry findEntry(String path) {
+        return entries().filter(entry -> entry.path().equals(path))
+                        .findFirst().orElse(null);
     }
 
     private Entry getEntry(String path) {
@@ -231,4 +261,20 @@ public class Jar {
             LOG.warn("Unable to add index: %s", e);
         }
     }
+
+
+    private static boolean isMultiRelease(Manifest manifest) {
+        return "true".equalsIgnoreCase(mainAttribute(manifest, Attributes.Name.MULTI_RELEASE));
+    }
+
+    private static String mainAttribute(Manifest manifest, Attributes.Name name) {
+        if (manifest != null) {
+            final Object value = manifest.getMainAttributes().get(name);
+            if (value != null) {
+                return value.toString();
+            }
+        }
+        return null;
+    }
+
 }

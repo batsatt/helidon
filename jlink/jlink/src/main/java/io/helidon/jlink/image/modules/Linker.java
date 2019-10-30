@@ -16,13 +16,9 @@
 
 package io.helidon.jlink.image.modules;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.spi.ToolProvider;
 
@@ -35,8 +31,11 @@ import io.helidon.jlink.image.modules.plugins.HelidonPlugin;
 
 import jdk.tools.jlink.plugin.PluginException;
 
+import static io.helidon.jlink.common.util.FileUtils.CURRENT_JAVA_HOME_DIR;
+
 /**
- * Wrapper for jlink to handle custom options and
+ * Create a JDK image by mapping all jars of a Helidon application into modules and linking
+ * them via jlink, then adding a CDS archive.
  */
 public class Linker {
 
@@ -49,10 +48,7 @@ public class Linker {
                     .complete();
     }
 
-    private static final Log LOG = Log.getLog("launcher");
-    private static final Path JAVA_HOME_DIR = Paths.get(System.getProperty("java.home"));
-    private static final Path CURRENT_DIR = Paths.get(".");
-    private static final String IMAGE_SUFFIX = "-image";
+    private static final Log LOG = Log.getLog("linker");
     private static final String WELD_JRT_JAR_PATH = "libs/helidon-weld-jrt.jar";
     private final List<String> jlinkArgs;
     private String[] cmdLineArgs;
@@ -66,7 +62,7 @@ public class Linker {
 
     private Linker() {
         this.jlinkArgs = new ArrayList<>();
-        this.javaHome = JAVA_HOME_DIR;
+        this.javaHome = CURRENT_JAVA_HOME_DIR;
         this.helidonPluginArgs = new StringBuilder();
         this.jlink = ToolProvider.findFirst("jlink").orElseThrow();
         System.setProperty("jlink.debug", "true"); // TODO
@@ -134,7 +130,7 @@ public class Linker {
             FileUtils.assertDir(appModulePath.getParent().resolve("libs"));
         }
 
-        imageDir = prepareImageDir();
+        imageDir = FileUtils.prepareImageDir(imageDir, appModulePath);
 
         return this;
     }
@@ -201,26 +197,6 @@ public class Linker {
         addArgument("--compress", "2");
 
         return this;
-    }
-
-    @SuppressWarnings("ResultOfMethodCallIgnored")
-    private Path prepareImageDir() throws IOException {
-        if (imageDir == null) {
-            final String jarName = appModulePath.getFileName().toString();
-            final String dirName = jarName.substring(0, jarName.lastIndexOf('.')) + IMAGE_SUFFIX;
-            imageDir = CURRENT_DIR.resolve(dirName);
-        }
-        if (Files.exists(imageDir)) {
-            if (Files.isDirectory(imageDir)) {
-                Files.walk(imageDir)
-                     .sorted(Comparator.reverseOrder())
-                     .map(Path::toFile)
-                     .forEach(File::delete);
-            } else {
-                throw new IllegalArgumentException(imageDir + " is not a directory");
-            }
-        }
-        return imageDir;
     }
 
     private void appendHelidonPluginArg(String key, Path value) {

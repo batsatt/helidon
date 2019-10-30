@@ -16,30 +16,30 @@
 
 package io.helidon.jlink.common.util;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.attribute.FileAttribute;
+import java.util.Comparator;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * File utilities.
  */
 public class FileUtils {
-
-    public static List<Path> listJarFiles(Path dir) {
-        return listFiles(dir, fileName -> fileName.endsWith(".jar"));
-    }
-
-    public static List<Path> listJmodFiles(Path dir) {
-        return listFiles(dir, fileName -> fileName.endsWith(".jmod"));
-    }
+    public static final Path CURRENT_JAVA_HOME_DIR = Paths.get(System.getProperty("java.home"));
+    public static final Path CURRENT_DIR = Paths.get(".").toAbsolutePath();
+    private static final String IMAGE_SUFFIX = "-image";
 
     public static Path ensureDirectory(Path path, FileAttribute<?>... attrs) {
-        if (Files.exists(path)) {
+        if (Files.exists(requireNonNull(path))) {
             return assertDir(path);
         } else {
             try {
@@ -50,7 +50,7 @@ public class FileUtils {
         }
     }
 
-    private static List<Path> listFiles(Path dir, Predicate<String> fileNameFilter) {
+    public static List<Path> listFiles(Path dir, Predicate<String> fileNameFilter) {
         try {
             return Files.find(assertDir(dir), 1, (path, attrs) ->
                 attrs.isRegularFile() && fileNameFilter.test(path.getFileName().toString())
@@ -73,15 +73,23 @@ public class FileUtils {
     }
 
     public static Path assertDir(Path dir) {
-        if (Files.isDirectory(dir)) {
+        if (Files.isDirectory(requireNonNull(dir))) {
             return dir.toAbsolutePath().normalize();
         } else {
             throw new IllegalArgumentException(dir + " is not a directory");
         }
     }
 
+    public static Path assertFile(Path file) {
+        if (Files.isRegularFile(requireNonNull(file))) {
+            return file.toAbsolutePath().normalize();
+        } else {
+            throw new IllegalArgumentException(file + " is not a file");
+        }
+    }
+
     public static Path assertExists(Path path) {
-        if (Files.exists(path)) {
+        if (Files.exists(requireNonNull(path))) {
             return path.toAbsolutePath().normalize();
         } else {
             throw new IllegalArgumentException(path + " does not exist");
@@ -89,5 +97,25 @@ public class FileUtils {
     }
 
     private FileUtils() {
+    }
+
+    @SuppressWarnings("ResultOfMethodCallIgnored")
+    public static Path prepareImageDir(Path imageDir, Path appJar) throws IOException {
+        if (imageDir == null) {
+            final String jarName = appJar.getFileName().toString();
+            final String dirName = jarName.substring(0, jarName.lastIndexOf('.')) + IMAGE_SUFFIX;
+            imageDir = CURRENT_DIR.resolve(dirName);
+        }
+        if (Files.exists(imageDir)) {
+            if (Files.isDirectory(imageDir)) {
+                Files.walk(imageDir)
+                     .sorted(Comparator.reverseOrder())
+                     .map(Path::toFile)
+                     .forEach(File::delete);
+            } else {
+                throw new IllegalArgumentException(imageDir + " is not a directory");
+            }
+        }
+        return imageDir;
     }
 }

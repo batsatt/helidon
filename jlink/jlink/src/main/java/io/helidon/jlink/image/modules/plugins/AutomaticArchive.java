@@ -45,6 +45,7 @@ import static jdk.tools.jlink.internal.Archive.Entry.EntryType.CLASS_OR_RESOURCE
  */
 public class AutomaticArchive extends DelegatingArchive {
     private static final Log LOG = Log.getLog("automatic-archive");
+    private static final String EOL = System.getProperty("line.separator");
     private static final ToolProvider JDEPS = ToolProvider.findFirst("jdeps").orElseThrow();
     private final boolean isMultiRelease;
     private final String releaseFeatureVersion;
@@ -123,7 +124,7 @@ public class AutomaticArchive extends DelegatingArchive {
         final Set<String> dependencies = new HashSet<>();
         final Map<String, DelegatingArchive> archivesByPackage = context.archivesByPackage();
 
-        Arrays.stream(out.toString().split("\\n")) // TODO EOL
+        Arrays.stream(out.toString().split(EOL))
               .map(String::trim)
               .filter(s -> !s.isEmpty())
               .filter(s -> !s.contains(jarName)) // references to self
