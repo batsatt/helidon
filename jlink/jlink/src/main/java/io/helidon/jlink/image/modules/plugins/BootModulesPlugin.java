@@ -173,6 +173,7 @@ public final class BootModulesPlugin implements Plugin {
 
     @Override
     public void configure(Map<String, String> config) {
+        LOG.info("BootModulesPlugin enabled: %s", enabled);
         String arg = config.get(NAME);
         if (arg != null) {
             throw new IllegalArgumentException(NAME + ": " + arg);

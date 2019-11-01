@@ -24,7 +24,6 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -36,6 +35,8 @@ import static io.helidon.jlink.common.util.FileUtils.CURRENT_JAVA_HOME_DIR;
 import static io.helidon.jlink.common.util.FileUtils.assertDir;
 import static io.helidon.jlink.common.util.FileUtils.assertFile;
 import static io.helidon.jlink.common.util.FileUtils.listFiles;
+import static java.util.Objects.requireNonNull;
+import static java.util.function.Function.identity;
 
 /**
  * A Java installation directory.
@@ -46,8 +47,6 @@ public class JavaHome {
     private static final String JMOD_SUFFIX = ".jmod";
     private static final String JAVA_BASE_JMOD = "java.base.jmod";
     private static final String JMOD_MODULE_INFO_PATH = "classes/module-info.class";
-    private static final String APP_DIR = "app";
-    private static final String APP_LIBS_DIR = "app/libs";
     private final Path javaHome;
     private final Runtime.Version version;
     private final Path jmodsDir;
@@ -67,12 +66,11 @@ public class JavaHome {
         this.jmodsDir = javaHome.resolve(JMODS_DIR);
         if (Files.isDirectory(jmodsDir)) {
             this.jmodFiles = listFiles(jmodsDir, fileName -> fileName.endsWith(JMOD_SUFFIX));
-
             this.version = isCurrent() ? Runtime.version() : findVersion();
             this.modules = jmodFiles.stream()
-                                    .collect(Collectors.toMap(JavaHome::moduleNameOf, Function.identity()));
+                                    .collect(Collectors.toMap(JavaHome::moduleNameOf, identity()));
         } else if (version == null) {
-            throw new IllegalArgumentException("version required in a java home without jmods dir");
+            throw new IllegalArgumentException("Version required in a Java home without 'jmods' dir: " + javaHome);
         } else {
             this.version = version;
             this.jmodFiles = List.of();
@@ -98,7 +96,7 @@ public class JavaHome {
 
     public JavaHome assertHasJmodFiles() {
         if (jmodFiles.isEmpty()) {
-            throw new IllegalArgumentException(javaHome + " must contain jmod files");
+            throw new IllegalArgumentException("Does not contain .jmod files: " + javaHome);
         }
         return this;
     }
@@ -110,17 +108,25 @@ public class JavaHome {
     public Path jmodFile(String moduleName) {
         final Path result = modules.get(moduleName);
         if (result == null) {
-            throw new IllegalStateException("cannot find jmod file for module '" + moduleName + "' in " + path());
+            throw new IllegalStateException("Cannot find .jmod file for module '" + moduleName + "' in " + path());
         }
         return result;
     }
 
-    public Path applicationDir() {
-        return FileUtils.ensureDirectory(path().resolve(APP_DIR));
-    }
-
-    public Path applicationLibsDir() {
-        return FileUtils.ensureDirectory(path().resolve(APP_LIBS_DIR));
+    /**
+     * Ensure that the given directory exists, creating it if necessary.
+     *
+     * @param directory The directory. May be relative or absolute.
+     * @return The directory.
+     * @throws IllegalArgumentException If the directory is absolute but is not within this Java Home directory.
+     */
+    public Path ensureDirectory(Path directory) {
+        Path relativeDir = requireNonNull(directory);
+        if (directory.isAbsolute()) {
+            // Ensure that the directory is within our directory.
+            relativeDir = path().relativize(directory);
+        }
+        return FileUtils.ensureDirectory(path().resolve(relativeDir));
     }
 
     private Runtime.Version findVersion() {

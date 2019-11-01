@@ -37,15 +37,20 @@ import static io.helidon.jlink.common.util.FileUtils.CURRENT_JAVA_HOME_DIR;
  * Create a JDK image by mapping all jars of a Helidon application into modules and linking
  * them via jlink, then adding a CDS archive.
  */
-public class Linker {
+public class ModulesLinker {
 
-    public static void main(String[] args) throws Exception {
-        new Linker().parse(args)
-                    .buildHelidonPluginArguments()
-                    .buildJlinkArguments()
-                    .buildImage()
-                    .addCdsArchive()
-                    .complete();
+    public static void main(String... args) throws Exception {
+        link(args);
+    }
+
+    static Path link(String... args) throws Exception {
+         final ModulesLinker linker = new ModulesLinker().configure(args)
+                                                         .buildHelidonPluginArguments()
+                                                         .buildJlinkArguments()
+                                                         .buildImage()
+                                                         .addCdsArchive()
+                                                         .complete();
+         return linker.imageDir;
     }
 
     private static final Log LOG = Log.getLog("linker");
@@ -60,7 +65,7 @@ public class Linker {
     private StringBuilder helidonPluginArgs;
     private final ToolProvider jlink;
 
-    private Linker() {
+    private ModulesLinker() {
         this.jlinkArgs = new ArrayList<>();
         this.javaHome = CURRENT_JAVA_HOME_DIR;
         this.helidonPluginArgs = new StringBuilder();
@@ -68,7 +73,7 @@ public class Linker {
         System.setProperty("jlink.debug", "true"); // TODO
     }
 
-    private Linker buildImage() {
+    private ModulesLinker buildImage() {
         final int result = jlink.run(System.out, System.err, jlinkArgs.toArray(new String[0]));
         if (result != 0) {
             throw new Error("Image creation failed.");
@@ -77,7 +82,7 @@ public class Linker {
         return this;
     }
 
-    private Linker addCdsArchive() {
+    private ModulesLinker addCdsArchive() {
         try {
             final ApplicationContext context = ApplicationContext.get();
             final ClassDataSharing cds = ClassDataSharing.builder()
@@ -92,11 +97,12 @@ public class Linker {
         return this;
     }
 
-    private void complete() {
+    private ModulesLinker complete() {
         LOG.info("Image completed: %s", imageDir);
+        return this;
     }
 
-    private Linker parse(String... args) throws Exception {
+    private ModulesLinker configure(String... args) throws Exception {
         this.cmdLineArgs = args;
         for (int i = 0; i < args.length; i++) {
             final String arg = args[i];
@@ -135,7 +141,7 @@ public class Linker {
         return this;
     }
 
-    private Linker buildHelidonPluginArguments() {
+    private ModulesLinker buildHelidonPluginArguments() {
 
         // Tell our plugin where the main application module is.
         // NOTE: jlink quirk here, where the first argument cannot be named.
@@ -161,7 +167,7 @@ public class Linker {
         return this;
     }
 
-    private Linker buildJlinkArguments() {
+    private ModulesLinker buildJlinkArguments() {
 
         // Tell jlink to use our plugins
 

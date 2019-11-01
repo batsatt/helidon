@@ -27,7 +27,11 @@ import java.lang.module.ModuleDescriptor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.jar.Attributes;
@@ -35,6 +39,7 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import java.util.zip.ZipEntry;
@@ -50,6 +55,7 @@ import org.jboss.jandex.UnsupportedVersion;
 
 import static io.helidon.jlink.common.util.FileUtils.assertDir;
 import static io.helidon.jlink.common.util.FileUtils.assertFile;
+import static java.util.Collections.emptyList;
 
 /**
  * CDI BeansArchive aware jar wrapper. Supports creating an index if missing and adding it during copy.
@@ -57,6 +63,7 @@ import static io.helidon.jlink.common.util.FileUtils.assertFile;
 public class Jar {
     private static final Log LOG = Log.getLog("jar");
     private static final String JMOD_SUFFIX = ".jmod";
+    private static final Set<String> SUPPORTED_SUFFIXES = Set.of(".jar", ".zip", JMOD_SUFFIX);
     private static final String BEANS_PATH = "META-INF/beans.xml";
     private static final String JANDEX_INDEX_PATH = "META-INF/jandex.idx";
     private static final String CLASS_FILE_SUFFIX = ".class";
@@ -67,12 +74,13 @@ public class Jar {
     private final Path path;
     private final boolean isJmod;
     private final JarFile jar;
+    private final Manifest manifest;
     private final boolean isMultiRelease;
     private final boolean isBeansArchive;
     private final boolean isSigned;
-    private final Index index;
-    private final boolean builtIndex;
     private final ModuleDescriptor descriptor;
+    private Index index;
+    private boolean builtIndex;
 
     public class Entry extends JarEntry {
 
@@ -93,42 +101,52 @@ public class Jar {
         }
     }
 
-    public Jar(Path path, boolean addIndexIfMissing) {
-        this.path = assertFile(path);
+    /**
+     * Test whether or not the given path should be treated as a jar.
+     *
+     * @param path The path.
+     * @return {@code true} if the path should be treated as a jar.
+     */
+    public static boolean isJar(Path path) {
+        if (Files.isRegularFile(path)) {
+            final String name = path.getFileName().toString();
+            final int lastDot = name.lastIndexOf('.');
+            if (lastDot >= 0) {
+                return SUPPORTED_SUFFIXES.contains(name.substring(lastDot));
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Returns the given jar path as a {@link Jar}.
+     *
+     * @param jarPath The jar path.
+     * @return The {@link Jar}.
+     * @throws IllegalArgumentException if the path is not treatable as a jar.
+     */
+    public static Jar open(Path jarPath) {
+        if (!isJar(jarPath)) {
+            throw new IllegalArgumentException("Not a jar: " + jarPath);
+        }
+        return new Jar(jarPath);
+    }
+
+    private Jar(Path path) {
+        this.path = assertFile(path); // Absolute and normalized
         this.isJmod = path.getFileName().toString().endsWith(JMOD_SUFFIX);
         try {
             this.jar = new JarFile(path.toFile());
-            this.isMultiRelease = !isJmod && isMultiRelease(jar.getManifest());
+            this.manifest = jar.getManifest();
+            this.isMultiRelease = !isJmod && isMultiRelease(manifest);
             this.isSigned = !isJmod && hasSignatureFile();
             this.isBeansArchive = !isJmod && hasEntry(BEANS_PATH);
-            final boolean hasIndex = isBeansArchive && hasEntry(JANDEX_INDEX_PATH);
-            Index index = null;
-            boolean builtIndex = false;
-            ModuleDescriptor descriptor = null;
-
-            if (isBeansArchive) {
-                if (hasIndex) {
-                    index = loadIndex();
-                }
-                if (index == null && addIndexIfMissing) {
-                    if (isSigned) {
-                        LOG.warn("Cannot add Jandex index to signed jar %s", name());
-                    } else {
-                        index = buildIndex();
-                        builtIndex = true;
-                    }
-                }
-            }
-
             final Entry moduleInfo = findEntry(isJmod ? JMOD_CLASSES_PREFIX + MODULE_INFO_CLASS : MODULE_INFO_CLASS);
             if (moduleInfo != null) {
-                descriptor = ModuleDescriptor.read(moduleInfo.data());
+                this.descriptor = ModuleDescriptor.read(moduleInfo.data());
+            } else {
+                this.descriptor = null;
             }
-
-            this.index = index;
-            this.builtIndex = builtIndex;
-            this.descriptor = descriptor;
-
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -140,6 +158,25 @@ public class Jar {
 
     public Path path() {
         return path;
+    }
+
+    /**
+     * Returns the manifest class-path if present.
+     *
+     * @return The paths that exist in the file system. May be empty or contain directories.
+     */
+    public List<Path> classPath() {
+        if (manifest != null) {
+            final Object path = manifest.getMainAttributes().get(Attributes.Name.CLASS_PATH);
+            if (path != null) {
+                final Path root = path().getParent();
+                return Arrays.stream(((String) path).split(" "))
+                             .map(root::resolve)
+                             .filter(file -> Files.exists(file))
+                             .collect(Collectors.toList());
+            }
+        }
+        return emptyList();
     }
 
     public Stream<Entry> entries() {
@@ -172,9 +209,12 @@ public class Jar {
         return descriptor;
     }
 
-    public Path copyToDirectory(Path dir) {
+    public Path copyToDirectory(Path dir, boolean ensureIndex) {
         final Path fileName = path.getFileName();
         final Path targetFile = assertDir(dir).resolve(fileName);
+        if (ensureIndex) {
+            ensureIndex();
+        }
         try (BufferedOutputStream out = new BufferedOutputStream(Files.newOutputStream(targetFile))) {
 
             // Add an index if we created it, otherwise just copy the file
@@ -191,8 +231,37 @@ public class Jar {
     }
 
     @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        final Jar jar = (Jar) o;
+        return path.equals(jar.path);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(path);
+    }
+
+    @Override
     public String toString() {
         return isSigned ? name() + " (signed)" : name();
+    }
+
+    private void ensureIndex() {
+        if (isBeansArchive) {
+            if (hasEntry(JANDEX_INDEX_PATH)) {
+                index = loadIndex();
+            }
+            if (index == null) {
+                if (isSigned) {
+                    LOG.warn("Cannot add Jandex index to signed jar %s", name());
+                } else {
+                    index = buildIndex();
+                    builtIndex = true;
+                }
+            }
+        }
     }
 
     private Index loadIndex() {
@@ -318,7 +387,7 @@ public class Jar {
 
 
     private static boolean isMultiRelease(Manifest manifest) {
-        return "true".equalsIgnoreCase(mainAttribute(manifest, Attributes.Name.MULTI_RELEASE));
+        return manifest != null && "true".equalsIgnoreCase(mainAttribute(manifest, Attributes.Name.MULTI_RELEASE));
     }
 
     private static String mainAttribute(Manifest manifest, Attributes.Name name) {

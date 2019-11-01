@@ -16,58 +16,124 @@
 
 package io.helidon.jlink.image.jars;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import io.helidon.jlink.common.logging.Log;
-
-import static io.helidon.jlink.common.util.FileUtils.assertDir;
-import static io.helidon.jlink.common.util.FileUtils.listFiles;
-import static java.util.Objects.requireNonNull;
+import io.helidon.jlink.common.util.FileUtils;
 
 /**
- * A Helidon application.
+ * A Helidon application supporting Java dependency collection and installation into a Java Home.
+ * This class assumes that the application was built re
  */
 public class Application {
     private static final Log LOG = Log.getLog("application");
-    private static final String LIBS_DIR = "libs";
-    private static final String JAR_SUFFIX = ".jar";
+    private static final Path APP_DIR = Paths.get("app");
     private static final String MP_FILE_PREFIX = "helidon-microprofile";
-    private final JavaHome targetJdk;
     private final Jar appJar;
-    private final List<Jar> libJars;
+    private final List<Jar> classPath;
     private final boolean isMicroprofile;
 
-    public Application(JavaHome targetJdk, Path applicationJar) {
-        this.targetJdk = requireNonNull(targetJdk);
-        final Path libDir = assertDir(applicationJar.getParent().resolve(LIBS_DIR));
-        final List<Path> libs = listFiles(libDir, fileName -> fileName.endsWith(JAR_SUFFIX));
-        this.isMicroprofile = libs.stream().anyMatch(e -> e.getFileName().toString().startsWith(MP_FILE_PREFIX));
-        this.appJar = new Jar(applicationJar, isMicroprofile);
-        this.libJars = listFiles(libDir, fileName -> fileName.endsWith(JAR_SUFFIX)).stream()
-                                                                                   .map(path -> new Jar(path, isMicroprofile))
-                                                                                   .collect(Collectors.toList());
+    /**
+     * Constructor.
+     *
+     * @param applicationJar The application jar.
+     */
+    public Application(Path applicationJar) {
+        this.appJar = Jar.open(applicationJar);
+        this.classPath = collectClassPath();
+        this.isMicroprofile = classPath.stream().anyMatch(jar -> jar.name().startsWith(MP_FILE_PREFIX));
     }
 
-    public JavaHome targetJdk() {
-        return targetJdk;
+    /**
+     * Returns the Java module names on which this application depends.
+     *
+     * @param javaHome The Java Home in which to find the dependencies.
+     * @return The module names.
+     */
+    public Set<String> javaDependencies(JavaHome javaHome) {
+        return JavaDependencies.collect(jars(), javaHome);
     }
 
+    /**
+     * Copy this application into the given Java Home.
+     *
+     * @param javaHome The Java Home in which to install this application.
+     * @return The location of the installed application jar.
+     */
+    public Path install(JavaHome javaHome) {
+        final Path appRootDir = appJar.path().getParent();
+        final Path appInstallDir = javaHome.ensureDirectory(APP_DIR);
+        final Path installedAppJar = appJar.copyToDirectory(appInstallDir, isMicroprofile);
+        classPath.forEach(jar -> {
+            final Path relativeDir = appRootDir.relativize(jar.path().getParent());
+            final Path installDir = javaHome.ensureDirectory(appInstallDir.resolve(relativeDir));
+            jar.copyToDirectory(installDir, isMicroprofile);
+        });
+        return installedAppJar;
+    }
+
+    /**
+     * Whether or not this application requires Microprofile.
+     *
+     * @return {@code true} if Microprofile.
+     */
     public boolean isMicroprofile() {
         return isMicroprofile;
     }
 
-    public Jar applicationJar() {
-        return appJar;
+    /**
+     * Returns the total number of jars in this application.
+     *
+     * @return The count.
+     */
+    public int size() {
+        return 1 + classPath.size();
     }
 
-    public List<Jar> applicationLibJars() {
-        return libJars;
+    private Stream<Jar> jars() {
+        return Stream.concat(Stream.of(appJar), classPath.stream());
     }
 
-    public Stream<Jar> jars() {
-        return Stream.concat(Stream.of(appJar), libJars.stream());
+    private List<Jar> collectClassPath() {
+        return addClassPath(appJar, new HashSet<>(), new ArrayList<>());
+    }
+
+    private List<Jar> addClassPath(Jar jar, Set<Jar> visited, List<Jar> classPath) {
+        if (!visited.contains(jar)) {
+            if (!jar.equals(appJar)) {
+                classPath.add(jar);
+            }
+            for (Path path : jar.classPath()) {
+                addClassPath(jar, path, visited, classPath);
+            }
+        }
+        return classPath;
+    }
+
+    private void addClassPath(Jar jar, Path classPathEntry, Set<Jar> visited, List<Jar> classPath) {
+        if (Files.isRegularFile(classPathEntry)) {
+            if (Jar.isJar(classPathEntry)) {
+                try {
+                    final Jar classPathJar = Jar.open(classPathEntry);
+                    addClassPath(classPathJar, visited, classPath);
+                } catch (Exception e) {
+                    LOG.warn("Could not open class path jar: %s", classPathEntry);
+                }
+            } else {
+                LOG.debug("Ignoring class path entry: %s", classPathEntry);
+            }
+        } else if (Files.isDirectory(classPathEntry)) {
+            // This won't happen from a normal Helidon app build, but handle it for the custom case.
+            FileUtils.list(classPathEntry).forEach(path -> {
+                addClassPath(jar, path, visited, classPath);
+            });
+        }
     }
 }

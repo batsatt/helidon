@@ -17,7 +17,6 @@
 package io.helidon.jlink.image.jars;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -25,166 +24,136 @@ import java.util.spi.ToolProvider;
 
 import io.helidon.jlink.common.logging.Log;
 import io.helidon.jlink.common.util.ClassDataSharing;
-import io.helidon.jlink.common.util.FileUtils;
-
-import static io.helidon.jlink.common.util.FileUtils.CURRENT_JAVA_HOME_DIR;
 
 /**
- * Create a JDK image by finding the JDK modules required of a Helidon application and linking
- * them via jlink, then adding the jars and a CDS archive.
+ * Create a JDK image by finding the Java modules required of a Helidon application and linking
+ * them via jlink, then adding the jars and a CDS archive. Adds Jandex indices as needed.
  */
 public class JarsLinker {
     private static final Log LOG = Log.getLog("jars-linker");
     private static final String JLINK_TOOL_NAME = "jlink";
     private final ToolProvider jlink;
     private final List<String> jlinkArgs;
-    private String[] cmdLineArgs;
-    private boolean stripDebug;
-    private boolean verbose;
-    private JavaHome javaHome;
-    private Path appJar;
-    private Path imageDir;
+    private Configuration config;
     private Application application;
-    private Set<String> jdkDependencies;
+    private Set<String> javaDependencies;
     private JavaHome imageHome;
     private Path imageApplicationJar;
 
+    /**
+     * Main entry point.
+     *
+     * @param args Command line arguments.
+     * @throws Exception If an error occurs.
+     */
     public static void main(String... args) throws Exception {
-        link(args);
+        final Configuration config = Configuration.builder().commandLine(args).build();
+        linker(config).link();
     }
 
-    static Path link(String... args) throws Exception {
-        final JarsLinker linker = new JarsLinker().configure(args)
-                                                  .buildApplication()
-                                                  .collectJdkDependencies()
-                                                  .buildJlinkArguments()
-                                                  .buildImage()
-                                                  .copyJars()
-                                                  .addCdsArchive()
-                                                  .complete();
-        return linker.imageDir;
+    /**
+     * Returns a new linker with the given configuration.
+     *
+     * @param config The configuration.
+     * @return The linker.
+     */
+    public static JarsLinker linker(Configuration config) {
+        return new JarsLinker(config);
     }
 
-    private JarsLinker() {
+    private JarsLinker(Configuration config) {
         this.jlink = ToolProvider.findFirst(JLINK_TOOL_NAME).orElseThrow();
         this.jlinkArgs = new ArrayList<>();
-        System.setProperty("jlink.debug", "true"); // TODO
-    }
-
-    private JarsLinker complete() {
-        LOG.info("Image completed: %s", imageDir);
-        return this;
-    }
-
-    private JarsLinker addCdsArchive() {
-        try {
-            ClassDataSharing.builder()
-                            .javaHome(imageHome.path())
-                            .applicationJar(imageApplicationJar)
-                            .showOutput(verbose)
-                            .build();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        this.config = config;
+        if (config.isVerbose()) {
+            System.setProperty("jlink.debug", "true");
         }
-        return this;
     }
 
-    private JarsLinker copyJars() {
-        LOG.info("Copying %d application jars to %s", application.applicationLibJars().size() + 1, imageDir);
-        final Path appDir = imageHome.applicationDir();
-        final Path appLibsDir = imageHome.applicationLibsDir();
-        this.imageApplicationJar = application.applicationJar().copyToDirectory(appDir);
-        application.applicationLibJars().forEach(jar -> jar.copyToDirectory(appLibsDir));
-        return this;
+    /**
+     * Create the image.
+     *
+     * @return The image directory.
+     */
+    public Path link() {
+        buildApplication();
+        collectJavaDependencies();
+        buildJlinkArguments();
+        buildImage();
+        copyJars();
+        addCdsArchive();
+        complete();
+        return config.imageDirectory();
     }
 
-    private JarsLinker buildImage() {
-        LOG.info("Building image: %s", imageDir);
-        final int result = jlink.run(System.out, System.err, jlinkArgs.toArray(new String[0]));
-        if (result != 0) {
-            throw new Error("Image creation failed.");
-        }
-        imageHome = new JavaHome(imageDir, javaHome.version());
-        return this;
+    /**
+     * Returns the configuration.
+     *
+     * @return The configuration.
+     */
+    public Configuration config() {
+        return config;
     }
 
-    private JarsLinker buildJlinkArguments() {
+    private void buildApplication() {
+        LOG.info("Loading application jars");
+        this.application = new Application(config.applicationJar());
+    }
+
+    private void collectJavaDependencies() {
+        LOG.info("Collecting Java module dependencies");
+        this.javaDependencies = application.javaDependencies(config.javaHome());
+        LOG.info("Found %d Java module dependencies: %s", javaDependencies.size(), String.join(", ", javaDependencies));
+    }
+
+    private void buildJlinkArguments() {
 
         // Tell jlink which jdk modules to include
 
-        addArgument("--add-modules", String.join(",", jdkDependencies));
+        addArgument("--add-modules", String.join(",", javaDependencies));
 
         // Tell jlink the directory in which to create and write the image
 
-        addArgument("--output", imageDir);
+        addArgument("--output", config.imageDirectory());
 
         // Tell jlink to strip out unnecessary stuff
 
-        if (stripDebug) {
+        if (config.isStripDebug()) {
             addArgument("--strip-debug");
         }
         addArgument("--no-header-files");
         addArgument("--no-man-pages");
         addArgument("--compress", "2");
-
-        return this;
     }
 
-    private JarsLinker collectJdkDependencies() {
-        LOG.info("Collecting JDK module dependencies");
-        final JdkDependencies dependencies = new JdkDependencies(javaHome);
-        this.jdkDependencies = dependencies.collect(application.jars());
-        LOG.info("JDK module dependencies: %s", String.join(", ", jdkDependencies));
-        return this;
-    }
-
-    private JarsLinker buildApplication() {
-        LOG.info("Loading application jars");
-        this.application = new Application(javaHome, appJar);
-        return this;
-    }
-
-    private JarsLinker configure(String... args) throws Exception {
-        Path javaHomeDir = CURRENT_JAVA_HOME_DIR;
-        this.cmdLineArgs = args;
-        for (int i = 0; i < args.length; i++) {
-            final String arg = args[i];
-            if (arg.startsWith("--")) {
-                if (arg.equalsIgnoreCase("--javaHome")) {
-                    javaHomeDir = Paths.get(argAt(++i));
-                } else if (arg.equalsIgnoreCase("--imageDir")) {
-                    imageDir = Paths.get(argAt(++i));
-                } else if (arg.equalsIgnoreCase("--strip-debug")) {
-                    stripDebug = true;
-                } else if (arg.equalsIgnoreCase("--verbose")) {
-                    verbose = true;
-                } else {
-                    throw new IllegalArgumentException("Unknown argument: " + arg);
-                }
-            } else if (appJar == null) {
-                appJar = FileUtils.assertExists(Paths.get(arg));
-            }
+    private void buildImage() {
+        LOG.info("Building image: %s", config.imageDirectory());
+        final int result = jlink.run(System.out, System.err, jlinkArgs.toArray(new String[0]));
+        if (result != 0) {
+            throw new Error("Image creation failed.");
         }
-
-        if (appJar == null) {
-            throw new IllegalArgumentException("applicationPath required");
-        } else {
-            FileUtils.assertDir(appJar.getParent().resolve("libs"));
-        }
-
-        javaHome = new JavaHome(javaHomeDir).assertHasJmodFiles();
-
-        imageDir = FileUtils.prepareImageDir(imageDir, appJar);
-
-        return this;
+        imageHome = new JavaHome(config.imageDirectory(), config.javaHome().version());
     }
 
-    private String argAt(int index) {
-        if (index < cmdLineArgs.length) {
-            return cmdLineArgs[index];
-        } else {
-            throw new IllegalArgumentException("missing argument"); // TODO usage()
+    private void copyJars() {
+        LOG.info("Copying %d application jars to %s", application.size(), config.imageDirectory());
+        this.imageApplicationJar = application.install(imageHome);
+    }
+
+    private void addCdsArchive() {
+        try {
+            ClassDataSharing.builder()
+                            .javaHome(imageHome.path())
+                            .applicationJar(imageApplicationJar)
+                            .showOutput(config.isVerbose())
+                            .build();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
+    }
+
+    private void complete() {
+        LOG.info("Image completed: %s", config.imageDirectory());
     }
 
     private void addArgument(String argument) {

@@ -16,7 +16,6 @@
 
 package io.helidon.jlink.common.util;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -50,11 +49,33 @@ public class FileUtils {
         }
     }
 
+    /**
+     * List all files in the given directory that match the given filter. Does not recurse.
+     *
+     * @param dir The directory.
+     * @param fileNameFilter The filter.
+     * @return The files.
+     */
     public static List<Path> listFiles(Path dir, Predicate<String> fileNameFilter) {
         try {
             return Files.find(assertDir(dir), 1, (path, attrs) ->
                 attrs.isRegularFile() && fileNameFilter.test(path.getFileName().toString())
             ).collect(Collectors.toList());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /**
+     * List all files and directories in the given directory. Does not recurse.
+     *
+     * @param dir The directory.
+     * @return The files.
+     */
+    public static List<Path> list(Path dir) {
+        try {
+            return Files.find(assertDir(dir), 1, (path, attrs) -> true)
+                        .collect(Collectors.toList());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -99,7 +120,6 @@ public class FileUtils {
     private FileUtils() {
     }
 
-    @SuppressWarnings("ResultOfMethodCallIgnored")
     public static Path prepareImageDir(Path imageDir, Path appJar) throws IOException {
         if (imageDir == null) {
             final String jarName = appJar.getFileName().toString();
@@ -110,8 +130,13 @@ public class FileUtils {
             if (Files.isDirectory(imageDir)) {
                 Files.walk(imageDir)
                      .sorted(Comparator.reverseOrder())
-                     .map(Path::toFile)
-                     .forEach(File::delete);
+                     .forEach(file -> {
+                         try {
+                             Files.delete(file);
+                         } catch (Exception e) {
+                             throw new Error(e);
+                         }
+                     });
             } else {
                 throw new IllegalArgumentException(imageDir + " is not a directory");
             }

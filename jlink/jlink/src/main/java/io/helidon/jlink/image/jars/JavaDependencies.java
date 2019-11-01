@@ -32,10 +32,10 @@ import io.helidon.jlink.common.logging.Log;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Utility to collect JDK dependencies for a collection of jars.
+ * Collects Java module dependencies for a set of jars.
  */
-public class JdkDependencies {
-    private static final Log LOG = Log.getLog("jdk-dependencies");
+public class JavaDependencies {
+    private static final Log LOG = Log.getLog("java-dependencies");
     private static final String JDEPS_TOOL_NAME = "jdeps";
     private static final String MULTI_RELEASE_ARG = "--multi-release";
     private static final String SYSTEM_ARG = "--system";
@@ -47,14 +47,25 @@ public class JdkDependencies {
     private final Set<String> javaModuleNames;
     private final Set<String> dependencies;
 
-    public JdkDependencies(JavaHome javaHome) {
+    /**
+     * Collect the dependencies of the given jars on the given Java Home.
+     *
+     * @param jars The jars.
+     * @param javaHome The Java Home.
+     * @return The module names.
+     */
+    public static Set<String> collect(Stream<Jar> jars, JavaHome javaHome) {
+        return new JavaDependencies(javaHome).collect(jars);
+    }
+
+    private JavaDependencies(JavaHome javaHome) {
         this.javaHome = requireNonNull(javaHome);
         this.javaModuleNames = javaHome.moduleNames();
         this.dependencies = new HashSet<>();
         this.dependencies.add(JAVA_BASE_MODULE_NAME);
     }
 
-    public Set<String> collect(Stream<Jar> jars) {
+    private Set<String> collect(Stream<Jar> jars) {
         jars.forEach(jar -> {
             if (jar.hasModuleDescriptor()) {
                 addModule(jar);
@@ -71,7 +82,7 @@ public class JdkDependencies {
     private void addDependency(String moduleName, Set<String> result) {
         if (!result.contains(moduleName)) {
             result.add(moduleName);
-            final Jar jar = new Jar(javaHome.jmodFile(moduleName), false);
+            final Jar jar = Jar.open(javaHome.jmodFile(moduleName));
             jar.moduleDescriptor().requires().forEach(r -> {
                 addDependency(r.name(), result);
             });

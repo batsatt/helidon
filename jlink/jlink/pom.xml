@@ -38,7 +38,7 @@
                     <finalName>${project.artifactId}</finalName>
                     <archive>
                         <manifest>
-                            <mainClass>io.helidon.jlink.image.modules.Linker</mainClass>
+                            <mainClass>io.helidon.jlink.image.modules.ModulesLinker</mainClass>
                         </manifest>
                     </archive>
                 </configuration>

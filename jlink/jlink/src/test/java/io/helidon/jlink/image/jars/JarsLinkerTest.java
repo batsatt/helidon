@@ -21,6 +21,8 @@ import java.nio.file.Paths;
 
 import io.helidon.jlink.common.util.FileUtils;
 
+import org.junit.jupiter.api.Test;
+
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 
@@ -32,15 +34,19 @@ class JarsLinkerTest {
     //@Test
     void testSignedJar() {
         Path signed = Paths.get("/Users/batsatt/.m2/repository/org/bouncycastle/bcpkix-jdk15on/1.60/bcpkix-jdk15on-1.60.jar");  // TODO
-        Jar jar = new Jar(signed, false);
+        Jar jar = Jar.open(signed);
         assertThat(jar.isSigned(), is(true));
     }
 
-    //@Test
+    @Test
     void testQuickstartSe() throws Exception {
-        Path targetDir = Paths.get("/Users/batsatt/dev/helidon-quickstart-se/target");  // TODO
+        Path targetDir = Paths.get("/Users/batsatt/dev/helidon-quickstart-se/target");  // TODO generate via archetype?
         Path applicationJar = targetDir.resolve("helidon-quickstart-se.jar");
-        Path imageDir = JarsLinker.link("--imageDir", targetDir.resolve("server-image").toString(), applicationJar.toString());
+        Configuration config = Configuration.builder()
+                                            .imageDirectory(targetDir.resolve("server-image"))
+                                            .applicationJar(applicationJar)
+                                            .build();
+        Path imageDir = JarsLinker.linker(config).link();
 
         FileUtils.assertDir(imageDir);
         Path appDir = FileUtils.assertDir(imageDir.resolve("app"));
@@ -50,11 +56,15 @@ class JarsLinkerTest {
         Path archiveFile = FileUtils.assertFile(libDir.resolve("server.jsa"));
     }
 
-    //@Test
+    @Test
     void testQuickstartMp() throws Exception {
-        Path targetDir = Paths.get("/Users/batsatt/dev/helidon-quickstart-mp/target");  // TODO
+        Path targetDir = Paths.get("/Users/batsatt/dev/helidon-quickstart-mp/target");   // TODO generate via archetype?
         Path applicationJar = targetDir.resolve("helidon-quickstart-mp.jar");
-        Path imageDir = JarsLinker.link("--imageDir", targetDir.resolve("server-image").toString(), applicationJar.toString());
+        Configuration config = Configuration.builder()
+                                            .imageDirectory(targetDir.resolve("server-image"))
+                                            .applicationJar(applicationJar)
+                                            .build();
+        Path imageDir = JarsLinker.linker(config).link();
 
         FileUtils.assertDir(imageDir);
         Path appDir = FileUtils.assertDir(imageDir.resolve("app"));
