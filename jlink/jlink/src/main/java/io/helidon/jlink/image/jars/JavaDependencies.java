@@ -28,6 +28,7 @@ import java.util.spi.ToolProvider;
 import java.util.stream.Stream;
 
 import io.helidon.jlink.common.logging.Log;
+import io.helidon.jlink.common.util.JavaRuntime;
 
 import static java.util.Objects.requireNonNull;
 
@@ -43,7 +44,7 @@ public class JavaDependencies {
     private static final String JAVA_BASE_MODULE_NAME = "java.base";
     private static final String EOL = System.getProperty("line.separator");
     private static final ToolProvider JDEPS = ToolProvider.findFirst(JDEPS_TOOL_NAME).orElseThrow();
-    private final JavaHome javaHome;
+    private final JavaRuntime javaHome;
     private final Set<String> javaModuleNames;
     private final Set<String> dependencies;
 
@@ -54,11 +55,11 @@ public class JavaDependencies {
      * @param javaHome The Java Home.
      * @return The module names.
      */
-    public static Set<String> collect(Stream<Jar> jars, JavaHome javaHome) {
+    public static Set<String> collect(Stream<Jar> jars, JavaRuntime javaHome) {
         return new JavaDependencies(javaHome).collect(jars);
     }
 
-    private JavaDependencies(JavaHome javaHome) {
+    private JavaDependencies(JavaRuntime javaHome) {
         this.javaHome = requireNonNull(javaHome);
         this.javaModuleNames = javaHome.moduleNames();
         this.dependencies = new HashSet<>();

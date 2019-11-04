@@ -20,22 +20,31 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.LogManager;
 import java.util.logging.Logger;
 
+import static java.util.Objects.requireNonNull;
+
 /**
- * Logging utilities.
+ * Log wrapper that supports {@link String#format(String, Object...)} style messages.
  */
 public class Log {
     private static final AtomicBoolean LOGGING_INITIALIZED = new AtomicBoolean();
+    private static final AtomicReference<Level> ADJUSTED_LEVEL = new AtomicReference<>();
     private static final Map<String, Log> INSTANCES = new HashMap<>();
     private final Logger log;
 
     private Log(String name) {
         this.log = Logger.getLogger(name);
+        final Level level = ADJUSTED_LEVEL.get();
+        if (level != null) {
+            log.setLevel(level);
+        }
     }
 
     /**
@@ -89,6 +98,22 @@ public class Log {
     public void log(final Level level, final String message, final Object... args) {
         if (log.isLoggable(level)) {
             log.log(level, format(message, args));
+        }
+    }
+
+    /**
+     * Set all loggers to the given level.
+     *
+     * @param level The level.
+     */
+    public static void setAllLevels(final Level level) {
+        ADJUSTED_LEVEL.set(requireNonNull(level));
+        final LogManager manager = LogManager.getLogManager();
+        final Iterator<String> loggerNames = manager.getLoggerNames().asIterator();
+        while (loggerNames.hasNext()) {
+            final String name = loggerNames.next();
+            final Logger logger = manager.getLogger(name);
+            logger.setLevel(level);
         }
     }
 

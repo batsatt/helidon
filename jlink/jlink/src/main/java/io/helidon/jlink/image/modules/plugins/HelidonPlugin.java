@@ -48,8 +48,8 @@ import java.util.stream.Stream;
 
 import io.helidon.jlink.common.logging.Log;
 import io.helidon.jlink.common.util.ClassDataSharing;
-import io.helidon.jlink.common.util.Environment;
 import io.helidon.jlink.common.util.StreamUtils;
+import io.helidon.jlink.common.util.JavaRuntime;
 
 import jdk.internal.module.ModulePath;
 import jdk.tools.jlink.internal.Archive;
@@ -71,7 +71,7 @@ import static jdk.tools.jlink.internal.Archive.Entry.EntryType.CLASS_OR_RESOURCE
  */
 public class HelidonPlugin implements Plugin {
     public static final String NAME = "helidon";
-    public static final String JAVA_HOME_KEY = "javaHome";
+    public static final String JDK_KEY = "jdk";
     public static final String PATCHES_DIR_KEY = "patchesDir";
     public static final String WELD_JRT_MODULE_KEY = "weldJrtModule";
     private static final Log LOG = Log.getLog(NAME);
@@ -86,7 +86,7 @@ public class HelidonPlugin implements Plugin {
     private final List<DelegatingArchive> allArchives = new ArrayList<>();
     private final Map<String, DelegatingArchive> archivesByPackage = new HashMap<>();
     private final Map<String, String> moduleSubstitutionNames = new HashMap<>();
-    private Path javaHome;
+    private JavaRuntime jdk;
     private Path appModulePath;
     private Path appLibsDir;
     private String appModuleName;
@@ -130,17 +130,17 @@ public class HelidonPlugin implements Plugin {
         appModulePath = configPath(NAME, config, null);
         appLibsDir = appModulePath.getParent().resolve("libs"); // Asserted valid in Main
         appModuleName = getModuleName(appModulePath);
-        javaHome = configPath(JAVA_HOME_KEY, config, Environment.JAVA_HOME);
+        jdk = jdk(configPath(JDK_KEY, config, null));
         patchesDir = configPath(PATCHES_DIR_KEY, config, null);
         weldJrtFile = configPath(WELD_JRT_MODULE_KEY, config, null);
-        javaModules = toModulesMap(javaHome.resolve("jmods"), true);
+        javaModules = toModulesMap(jdk.path().resolve("jmods"), true);
         javaModuleNames = javaModules.keySet();
         javaBaseVersion = toRuntimeVersion(javaModules.get("java.base"));
         classListFile = createClassListFile();
         classList = readAllLines(classListFile);
 
         LOG.info("Application configuration:\n");
-        LOG.info("       java home: %s", javaHome);
+        LOG.info("       java home: %s", jdk);
         LOG.info("    java version: %s", javaBaseVersion);
         LOG.info("   appModuleName: %s", appModuleName);
         LOG.info("   appModulePath: %s", appModulePath);
@@ -186,8 +186,8 @@ public class HelidonPlugin implements Plugin {
     private ApplicationContext createContext() {
         return ApplicationContext.set(new ApplicationContext() {
             @Override
-            public Path javaHome() {
-                return javaHome;
+            public JavaRuntime jdk() {
+                return jdk;
             }
 
             @Override
@@ -225,7 +225,7 @@ public class HelidonPlugin implements Plugin {
     private Path createClassListFile() {
         try {
             ClassDataSharing cds = ClassDataSharing.builder()
-                                                   .javaHome(javaHome)
+                                                   .jre(jdk.path())
                                                    .applicationJar(appModulePath)
                                                    .createArchive(false)
                                                    .showOutput(false)
@@ -262,6 +262,14 @@ public class HelidonPlugin implements Plugin {
             final Patches patches = new Patches(patchesDir, javaBaseVersion);
             patchesByPath = patches.entries()
                                    .collect(toMap(Archive.Entry::getResourcePoolEntryName, e -> e));
+        }
+    }
+
+    private JavaRuntime jdk(Path configPath) {
+        if (configPath == null) {
+            return JavaRuntime.current(true);
+        } else {
+            return JavaRuntime.jdk(configPath);
         }
     }
 

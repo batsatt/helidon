@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
-import io.helidon.jlink.common.util.Environment;
+import io.helidon.jlink.common.util.JavaRuntime;
 
 import static java.util.Objects.requireNonNull;
 
@@ -52,20 +52,20 @@ public abstract class ApplicationContext {
     }
 
     /**
-     * Tests whether or not we are targeting a Java Home other than the one we are running in.
+     * Tests whether or not we are building from a JDK other than the one we are running in.
      *
      * @return {@code true} if using an alternate.
      */
-    public boolean isAlternateJavaHome() {
-        return !javaHome().equals(Environment.JAVA_HOME);
+    public boolean isAlternateJdk() {
+        return !jdk().isCurrent();
     }
 
     /**
-     * Returns the Java Home path.
+     * Returns the JDK.
      *
-     * @return The path.
+     * @return The JDK.
      */
-    public abstract Path javaHome();
+    public abstract JavaRuntime jdk();
 
     /**
      * Returns whether or not the application uses Microprofile.

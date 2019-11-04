@@ -20,25 +20,28 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.logging.Level;
 import java.util.spi.ToolProvider;
 
 import io.helidon.jlink.common.logging.Log;
 import io.helidon.jlink.common.util.ClassDataSharing;
+import io.helidon.jlink.common.util.JavaRuntime;
 
 /**
- * Create a JDK image by finding the Java modules required of a Helidon application and linking
- * them via jlink, then adding the jars and a CDS archive. Adds Jandex indices as needed.
+ * Create a custom JRE by finding the Java modules required of a Helidon application and linking
+ * them via jlink, then adding the jars and, optionally, a CDS archive. Adds Jandex indices as needed.
  */
 public class JarsLinker {
     private static final Log LOG = Log.getLog("jars-linker");
     private static final String JLINK_TOOL_NAME = "jlink";
+    private static final String JLINK_DEBUG_PROPERTY = JLINK_TOOL_NAME + ".debug";
     private final ToolProvider jlink;
     private final List<String> jlinkArgs;
     private Configuration config;
     private Application application;
     private Set<String> javaDependencies;
-    private JavaHome imageHome;
-    private Path imageApplicationJar;
+    private JavaRuntime jre;
+    private Path jreMainJar;
 
     /**
      * Main entry point.
@@ -47,8 +50,10 @@ public class JarsLinker {
      * @throws Exception If an error occurs.
      */
     public static void main(String... args) throws Exception {
-        final Configuration config = Configuration.builder().commandLine(args).build();
-        linker(config).link();
+        linker(Configuration.builder()
+                            .commandLine(args)
+                            .build())
+            .link();
     }
 
     /**
@@ -65,25 +70,26 @@ public class JarsLinker {
         this.jlink = ToolProvider.findFirst(JLINK_TOOL_NAME).orElseThrow();
         this.jlinkArgs = new ArrayList<>();
         this.config = config;
-        if (config.isVerbose()) {
-            System.setProperty("jlink.debug", "true");
+        if (config.verbose()) {
+            Log.setAllLevels(Level.FINEST);
+            System.setProperty(JLINK_DEBUG_PROPERTY, "true");
         }
     }
 
     /**
-     * Create the image.
+     * Create the JRE.
      *
-     * @return The image directory.
+     * @return The JRE directory.
      */
     public Path link() {
         buildApplication();
         collectJavaDependencies();
         buildJlinkArguments();
-        buildImage();
+        buildJre();
         copyJars();
         addCdsArchive();
         complete();
-        return config.imageDirectory();
+        return config.jreDirectory();
     }
 
     /**
@@ -97,12 +103,12 @@ public class JarsLinker {
 
     private void buildApplication() {
         LOG.info("Loading application jars");
-        this.application = new Application(config.applicationJar());
+        this.application = new Application(config.mainJar());
     }
 
     private void collectJavaDependencies() {
         LOG.info("Collecting Java module dependencies");
-        this.javaDependencies = application.javaDependencies(config.javaHome());
+        this.javaDependencies = application.javaDependencies(config.jdk());
         LOG.info("Found %d Java module dependencies: %s", javaDependencies.size(), String.join(", ", javaDependencies));
     }
 
@@ -112,13 +118,13 @@ public class JarsLinker {
 
         addArgument("--add-modules", String.join(",", javaDependencies));
 
-        // Tell jlink the directory in which to create and write the image
+        // Tell jlink the directory in which to create and write the JRE
 
-        addArgument("--output", config.imageDirectory());
+        addArgument("--output", config.jreDirectory());
 
         // Tell jlink to strip out unnecessary stuff
 
-        if (config.isStripDebug()) {
+        if (config.stripDebug()) {
             addArgument("--strip-debug");
         }
         addArgument("--no-header-files");
@@ -126,34 +132,36 @@ public class JarsLinker {
         addArgument("--compress", "2");
     }
 
-    private void buildImage() {
-        LOG.info("Building image: %s", config.imageDirectory());
+    private void buildJre() {
+        LOG.info("Building JRE: %s", config.jreDirectory());
         final int result = jlink.run(System.out, System.err, jlinkArgs.toArray(new String[0]));
         if (result != 0) {
-            throw new Error("Image creation failed.");
+            throw new Error("JRE creation failed.");
         }
-        imageHome = new JavaHome(config.imageDirectory(), config.javaHome().version());
+        jre = JavaRuntime.jre(config.jreDirectory(), config.jdk().version());
     }
 
     private void copyJars() {
-        LOG.info("Copying %d application jars to %s", application.size(), config.imageDirectory());
-        this.imageApplicationJar = application.install(imageHome);
+        LOG.info("Copying %d application jars to %s", application.size(), config.jreDirectory());
+        this.jreMainJar = application.install(jre);
     }
 
     private void addCdsArchive() {
-        try {
-            ClassDataSharing.builder()
-                            .javaHome(imageHome.path())
-                            .applicationJar(imageApplicationJar)
-                            .showOutput(config.isVerbose())
-                            .build();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        if (config.cds()) {
+            try {
+                ClassDataSharing.builder()
+                                .jre(jre.path())
+                                .applicationJar(jreMainJar)
+                                .showOutput(config.verbose())
+                                .build();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 
     private void complete() {
-        LOG.info("Image completed: %s", config.imageDirectory());
+        LOG.info("JRE completed: %s", config.jreDirectory());
     }
 
     private void addArgument(String argument) {

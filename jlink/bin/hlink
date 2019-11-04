@@ -2,7 +2,7 @@
 
 usage() {
     println
-    println "Build a custom JRE image from an application."
+    println "Build a custom JRE from an application."
     println
     println "Usage: ${scriptName} [--debug] [--dir] [--jars] <applicationJarPath>"
     println

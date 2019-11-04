@@ -16,85 +16,155 @@
 
 package io.helidon.jlink.image.jars;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
 import io.helidon.jlink.common.util.FileUtils;
+import io.helidon.jlink.common.util.JavaRuntime;
 
 import static io.helidon.jlink.common.util.FileUtils.CURRENT_JAVA_HOME_DIR;
+import static io.helidon.jlink.common.util.FileUtils.assertDir;
 import static io.helidon.jlink.common.util.FileUtils.assertFile;
+import static java.lang.Boolean.parseBoolean;
+import static java.util.Objects.requireNonNull;
 
 /**
  * Linker configuration.
  */
 public class Configuration {
-    private JavaHome javaHome;
-    private Path applicationJar;
-    private Path imageDirectory;
+    private JavaRuntime jdk;
+    private Path mainJar;
+    private Path jreDirectory;
     private boolean verbose;
     private boolean stripDebug;
+    private boolean cds;
 
+    /**
+     * Returns a new configuration builder.
+     *
+     * @return The builder.
+     */
     public static Builder builder() {
         return new Builder();
     }
 
     private Configuration(Builder builder) {
-        this.javaHome = builder.javaHome;
-        this.applicationJar = builder.applicationJar;
-        this.imageDirectory = builder.imageDirectory;
+        this.jdk = builder.jdk;
+        this.mainJar = builder.mainJar;
+        this.jreDirectory = builder.jreDirectory;
         this.verbose = builder.verbose;
         this.stripDebug = builder.stripDebug;
+        this.cds = builder.cds;
     }
 
-    public JavaHome javaHome() {
-        return javaHome;
+    /**
+     * Returns the JDK from which to create the JRE.
+     *
+     * @return The {@link JavaRuntime}.
+     */
+    public JavaRuntime jdk() {
+        return jdk;
     }
 
-    public Path applicationJar() {
-        return applicationJar;
+    /**
+     * Returns the directory at which to create the JRE.
+     *
+     * @return The path, guaranteed to not exist.
+     */
+    public Path jreDirectory() {
+        return jreDirectory;
     }
 
-    public Path imageDirectory() {
-        return imageDirectory;
+    /**
+     * Returns the path to the main jar.
+     *
+     * @return The path.
+     */
+    public Path mainJar() {
+        return mainJar;
     }
 
-    public boolean isVerbose() {
+    /**
+     * Returns whether or not to create a CDS archive.
+     *
+     * @return {@code true} if a CDS archive should be created.
+     */
+    public boolean cds() {
+        return cds;
+    }
+
+    /**
+     * Returns whether or not to log detail messages.
+     *
+     * @return {@code true} if detail messages should be logged.
+     */
+    public boolean verbose() {
         return verbose;
     }
 
-    public boolean isStripDebug() {
+    /**
+     * Returns whether or not to strip debug information from JDK classes.
+     *
+     * @return {@code true} if debug information should be stripped.
+     */
+    public boolean stripDebug() {
         return stripDebug;
     }
 
+    /**
+     * A {@link Configuration} builder.
+     */
     public static class Builder {
-        private Path javaHomeDir;
-        private Path applicationJar;
-        private Path imageDirectory;
+        private Path mainJar;
+        private Path jdkDirectory;
+        private Path jreDirectory;
+        private boolean replace;
         private boolean verbose;
         private boolean stripDebug;
-        private JavaHome javaHome;
+        private JavaRuntime jdk;
+        private boolean cds;
 
         private Builder() {
-            javaHomeDir = CURRENT_JAVA_HOME_DIR;
+            jdkDirectory = CURRENT_JAVA_HOME_DIR;
+            cds = true;
         }
 
+        /**
+         * Set configuration from command line arguments.
+         *
+         * @param args The arguments: [options] path-to-main-jar. Options:
+         * <pre>
+         *     --jdk directory          The JDK directory from which to create the JRE. Defaults to current.
+         *     --jre directory          The directory at which to create the JRE.
+         *     --replace true|false     Whether or not to delete the JRE directory if it exists. Defaults to false.
+         *     --cds true|false         Whether or not to create a CDS archive. Defaults to true.
+         *     --verbose true|false     Whether or not to log detail messages. Defaults to false.
+         *     --stripDebug true|false  Whether or not to strip debug information from JDK classes. Defaults to false.
+         * </pre>
+         * @return The builder.
+         */
         public Builder commandLine(String... args) {
             for (int i = 0; i < args.length; i++) {
                 final String arg = args[i];
                 if (arg.startsWith("--")) {
-                    if (arg.equalsIgnoreCase("--javaHome")) {
-                        javaHome(Paths.get(argAt(++i, args)));
-                    } else if (arg.equalsIgnoreCase("--imageDir")) {
-                        imageDirectory(Paths.get(argAt(++i, args)));
-                    } else if (arg.equalsIgnoreCase("--strip-debug")) {
-                        stripDebug(true);
+                    if (arg.equalsIgnoreCase("--jdk")) {
+                        jdkDirectory(Paths.get(argAt(++i, args)));
+                    } else if (arg.equalsIgnoreCase("--jre")) {
+                        jreDirectory(Paths.get(argAt(++i, args)));
+                    } else if (arg.equalsIgnoreCase("--replace")) {
+                        replace(parseBoolean(argAt(++i, args)));
+                    } else if (arg.equalsIgnoreCase("--cds")) {
+                        cds(parseBoolean(argAt(++i, args)));
                     } else if (arg.equalsIgnoreCase("--verbose")) {
                         verbose(true);
+                    } else if (arg.equalsIgnoreCase("--stripDebug")) {
+                        stripDebug(true);
                     } else {
                         throw new IllegalArgumentException("Unknown argument: " + arg);
                     }
-                } else if (applicationJar == null) {
-                    applicationJar(FileUtils.assertExists(Paths.get(arg)));
+                } else if (mainJar == null) {
+                    mainJar(FileUtils.assertExists(Paths.get(arg)));
                 } else {
                     throw new IllegalArgumentException("Unknown argument: " + arg);
                 }
@@ -103,45 +173,104 @@ public class Configuration {
             return this;
         }
 
-        public Builder javaHome(Path javaHomeDir) {
-            this.javaHomeDir = javaHomeDir;
+        /**
+         * Sets the main jar.
+         *
+         * @param mainJar The path to the main jar.
+         * @return The builder.
+         */
+        public Builder mainJar(Path mainJar) {
+            this.mainJar = assertFile(mainJar);
             return this;
         }
 
-        public Builder applicationJar(Path applicationJar) {
-            this.applicationJar = assertFile(applicationJar);
+        /**
+         * Sets the JDK from which to create the JRE. Defaults to current.
+         *
+         * @param jdkDirectory The directory. Must be a valid JDK containing jmod files.
+         * @return The builder.
+         */
+        public Builder jdkDirectory(Path jdkDirectory) {
+            this.jdkDirectory = assertDir(jdkDirectory);
             return this;
         }
 
-        public Builder imageDirectory(Path imageDirectory) {
-            this.imageDirectory = imageDirectory;
+        /**
+         * Sets the directory at which to create the JRE. If not provided, will be created in
+         * a subdirectory of the current working directory, with a name based on the {@link #mainJar}.
+         *
+         * @param jreDirectory The directory.
+         * @return The builder.
+         */
+        public Builder jreDirectory(Path jreDirectory) {
+            this.jreDirectory = requireNonNull(jreDirectory);
             return this;
         }
 
+        /**
+         * Sets whether or not to delete the {@code jreDirectory} if it exists. Defaults to {@code false}.
+         *
+         * @param replace {@code true} if the directory should be deleted if present.
+         * @return
+         */
+        public Builder replace(boolean replace) {
+            this.replace = replace;
+            return this;
+        }
+
+        /**
+         * Sets whether or not to build a CDS archive. Defaults to {@code true}.
+         *
+         * @param cds {@code true} if a CDS archive should be created.
+         * @return
+         */
+        public Builder cds(boolean cds) {
+            this.cds = cds;
+            return this;
+        }
+
+        /**
+         * Sets whether or not to log detail messages.
+         *
+         * @param verbose {@code true} if detail messages should be created.
+         * @return The builder.
+         */
         public Builder verbose(boolean verbose) {
             this.verbose = verbose;
             return this;
         }
 
+        /**
+         * Sets whether or not to strip debug information from JDK classes.
+         *
+         * @param stripDebug {@code true} if debug information should be stripped.
+         * @return The builder.
+         */
         public Builder stripDebug(boolean stripDebug) {
             this.stripDebug = stripDebug;
             return this;
         }
 
-        public Configuration build() throws Exception {
-            if (applicationJar == null) {
+        /**
+         * Returns the {@link Configuration} instance.
+         *
+         * @return The instance.
+         * @throws IOException If an error occurs.
+         */
+        public Configuration build() throws IOException {
+            if (mainJar == null) {
                 throw new IllegalArgumentException("applicationJar required");
             }
-            javaHome = new JavaHome(javaHomeDir).assertHasJmodFiles();
-            imageDirectory = FileUtils.prepareImageDir(imageDirectory, applicationJar);
+            jdk = JavaRuntime.jdk(jdkDirectory);
+            jreDirectory = JavaRuntime.prepareJreDirectory(jreDirectory, mainJar, replace);
             return new Configuration(this);
         }
 
-        private String argAt(int index, String[] args) {
+        private static String argAt(int index, String[] args) {
             if (index < args.length) {
                 return args[index];
             } else {
-                throw new IllegalArgumentException("missing argument"); // TODO usage()
+                throw new IllegalArgumentException(args[index - 1] + ": missing required argument");
             }
         }
     }

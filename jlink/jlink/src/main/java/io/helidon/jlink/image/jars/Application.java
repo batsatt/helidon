@@ -27,6 +27,7 @@ import java.util.stream.Stream;
 
 import io.helidon.jlink.common.logging.Log;
 import io.helidon.jlink.common.util.FileUtils;
+import io.helidon.jlink.common.util.JavaRuntime;
 
 /**
  * A Helidon application supporting Java dependency collection and installation into a Java Home.
@@ -36,17 +37,17 @@ public class Application {
     private static final Log LOG = Log.getLog("application");
     private static final Path APP_DIR = Paths.get("app");
     private static final String MP_FILE_PREFIX = "helidon-microprofile";
-    private final Jar appJar;
+    private final Jar mainJar;
     private final List<Jar> classPath;
     private final boolean isMicroprofile;
 
     /**
      * Constructor.
      *
-     * @param applicationJar The application jar.
+     * @param mainJar The main jar.
      */
-    public Application(Path applicationJar) {
-        this.appJar = Jar.open(applicationJar);
+    public Application(Path mainJar) {
+        this.mainJar = Jar.open(mainJar);
         this.classPath = collectClassPath();
         this.isMicroprofile = classPath.stream().anyMatch(jar -> jar.name().startsWith(MP_FILE_PREFIX));
     }
@@ -57,23 +58,23 @@ public class Application {
      * @param javaHome The Java Home in which to find the dependencies.
      * @return The module names.
      */
-    public Set<String> javaDependencies(JavaHome javaHome) {
+    public Set<String> javaDependencies(JavaRuntime javaHome) {
         return JavaDependencies.collect(jars(), javaHome);
     }
 
     /**
      * Copy this application into the given Java Home.
      *
-     * @param javaHome The Java Home in which to install this application.
+     * @param jre The JRE in which to install this application.
      * @return The location of the installed application jar.
      */
-    public Path install(JavaHome javaHome) {
-        final Path appRootDir = appJar.path().getParent();
-        final Path appInstallDir = javaHome.ensureDirectory(APP_DIR);
-        final Path installedAppJar = appJar.copyToDirectory(appInstallDir, isMicroprofile);
+    public Path install(JavaRuntime jre) {
+        final Path appRootDir = mainJar.path().getParent();
+        final Path appInstallDir = jre.ensureDirectory(APP_DIR);
+        final Path installedAppJar = mainJar.copyToDirectory(appInstallDir, isMicroprofile);
         classPath.forEach(jar -> {
             final Path relativeDir = appRootDir.relativize(jar.path().getParent());
-            final Path installDir = javaHome.ensureDirectory(appInstallDir.resolve(relativeDir));
+            final Path installDir = jre.ensureDirectory(appInstallDir.resolve(relativeDir));
             jar.copyToDirectory(installDir, isMicroprofile);
         });
         return installedAppJar;
@@ -98,16 +99,16 @@ public class Application {
     }
 
     private Stream<Jar> jars() {
-        return Stream.concat(Stream.of(appJar), classPath.stream());
+        return Stream.concat(Stream.of(mainJar), classPath.stream());
     }
 
     private List<Jar> collectClassPath() {
-        return addClassPath(appJar, new HashSet<>(), new ArrayList<>());
+        return addClassPath(mainJar, new HashSet<>(), new ArrayList<>());
     }
 
     private List<Jar> addClassPath(Jar jar, Set<Jar> visited, List<Jar> classPath) {
         if (!visited.contains(jar)) {
-            if (!jar.equals(appJar)) {
+            if (!jar.equals(mainJar)) {
                 classPath.add(jar);
             }
             for (Path path : jar.classPath()) {

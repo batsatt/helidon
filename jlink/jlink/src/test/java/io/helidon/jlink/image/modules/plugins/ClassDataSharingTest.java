@@ -43,7 +43,7 @@ class ClassDataSharingTest {
         Path applicationJar = Paths.get("/Users/batsatt/dev/helidon-quickstart-mp/target/helidon-quickstart-mp.jar"); // TODO
         Path weldJrtJar = Paths.get("/Users/batsatt/dev/helidon/jlink/weld/target/helidon-weld-jrt.jar"); // TODO
         ClassDataSharing cds = ClassDataSharing.builder()
-                                               .javaHome(JAVA_HOME)
+                                               .jre(JAVA_HOME)
                                                .applicationJar(applicationJar)
                                                .createArchive(false)
                                                .showOutput(true)
@@ -61,7 +61,7 @@ class ClassDataSharingTest {
         assertDoesNotContain(cds.classList(), "io/helidon/weld/JrtDiscoveryStrategy");
 
         cds = ClassDataSharing.builder()
-                              .javaHome(JAVA_HOME)
+                              .jre(JAVA_HOME)
                               .applicationJar(applicationJar)
                               .classListFile(cds.classListFile())
                               .weldJrtJar(weldJrtJar)

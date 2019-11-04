@@ -52,7 +52,7 @@ public class ClassDataSharing {
     }
 
     public static ClassDataSharing create(Path javaHome, Path applicationJar) throws Exception {
-        return builder().javaHome(javaHome)
+        return builder().jre(javaHome)
                         .applicationJar(applicationJar)
                         .build();
     }
@@ -124,8 +124,8 @@ public class ClassDataSharing {
             this.archiveDir = LIB_DIR_NAME;
         }
 
-        public Builder javaHome(Path javaHome) {
-            this.javaHome = assertDir(requireNonNull(javaHome));
+        public Builder jre(Path javaHome) {
+            this.javaHome = javaHome;
             javaPath(); // Validate
             return this;
         }
@@ -284,7 +284,7 @@ public class ClassDataSharing {
         }
 
         private Path javaPath() {
-            return assertFile(javaHome.resolve(JAVA_CMD_PATH));
+            return JavaRuntime.javaCommand(javaHome);
         }
 
         private static Path tempFile(String suffix) throws IOException {

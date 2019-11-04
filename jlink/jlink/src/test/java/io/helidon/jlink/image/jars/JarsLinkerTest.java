@@ -43,8 +43,9 @@ class JarsLinkerTest {
         Path targetDir = Paths.get("/Users/batsatt/dev/helidon-quickstart-se/target");  // TODO generate via archetype?
         Path applicationJar = targetDir.resolve("helidon-quickstart-se.jar");
         Configuration config = Configuration.builder()
-                                            .imageDirectory(targetDir.resolve("server-image"))
-                                            .applicationJar(applicationJar)
+                                            .jreDirectory(targetDir.resolve("se-jre"))
+                                            .mainJar(applicationJar)
+                                            .replace(true)
                                             .build();
         Path imageDir = JarsLinker.linker(config).link();
 
@@ -61,8 +62,9 @@ class JarsLinkerTest {
         Path targetDir = Paths.get("/Users/batsatt/dev/helidon-quickstart-mp/target");   // TODO generate via archetype?
         Path applicationJar = targetDir.resolve("helidon-quickstart-mp.jar");
         Configuration config = Configuration.builder()
-                                            .imageDirectory(targetDir.resolve("server-image"))
-                                            .applicationJar(applicationJar)
+                                            .jreDirectory(targetDir.resolve("mp-jre"))
+                                            .mainJar(applicationJar)
+                                            .replace(true)
                                             .build();
         Path imageDir = JarsLinker.linker(config).link();
 

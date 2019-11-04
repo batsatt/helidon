@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-package io.helidon.jlink.image.jars;
+package io.helidon.jlink.common.util;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.module.ModuleDescriptor;
@@ -28,9 +29,6 @@ import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
-import io.helidon.jlink.common.logging.Log;
-import io.helidon.jlink.common.util.FileUtils;
-
 import static io.helidon.jlink.common.util.FileUtils.CURRENT_JAVA_HOME_DIR;
 import static io.helidon.jlink.common.util.FileUtils.assertDir;
 import static io.helidon.jlink.common.util.FileUtils.assertFile;
@@ -39,42 +37,90 @@ import static java.util.Objects.requireNonNull;
 import static java.util.function.Function.identity;
 
 /**
- * A Java installation directory.
+ * A Java Runtime directory.
  */
-public class JavaHome {
-    private static final Log LOG = Log.getLog("java-home");
+public class JavaRuntime {
     private static final String JMODS_DIR = "jmods";
     private static final String JMOD_SUFFIX = ".jmod";
     private static final String JAVA_BASE_JMOD = "java.base.jmod";
     private static final String JMOD_MODULE_INFO_PATH = "classes/module-info.class";
+    private static final String JRE_SUFFIX = "-jre";
+    private static final String FILE_SEP = File.separator;
+    private static final String JAVA_CMD_PATH = "bin" + FILE_SEP + "java";
     private final Path javaHome;
     private final Runtime.Version version;
     private final Path jmodsDir;
     private final List<Path> jmodFiles;
     private final Map<String, Path> modules;
 
-    public JavaHome() {
-        this(CURRENT_JAVA_HOME_DIR);
+    /**
+     * Ensures a valid JRE directory path, deleting if required.
+     *
+     * @param jreDirectory The JRE directory. May be {@code null}.
+     * @param mainJar The main jar, used to create a name if {@code jreDirectory} not provided.
+     * May not be {@code null}.
+     * @param replaceExisting {@code true} if the directory can be deleted if already present.
+     * @return The directory.
+     * @throws IOException If an error occurs.
+     */
+    public static Path prepareJreDirectory(Path jreDirectory, Path mainJar, boolean replaceExisting) throws IOException {
+        if (jreDirectory == null) {
+            final String jarName = requireNonNull(mainJar).getFileName().toString();
+            final String dirName = jarName.substring(0, jarName.lastIndexOf('.')) + JRE_SUFFIX;
+            jreDirectory = FileUtils.CURRENT_DIR.resolve(dirName);
+        }
+        if (Files.exists(jreDirectory)) {
+            if (Files.isDirectory(jreDirectory)) {
+                if (replaceExisting) {
+                    FileUtils.deleteDirectory(jreDirectory);
+                } else {
+                    throw new IllegalArgumentException(jreDirectory + " is an existing directory");
+                }
+            } else {
+                throw new IllegalArgumentException(jreDirectory + " is an existing file");
+            }
+        }
+        return jreDirectory;
     }
 
-    public JavaHome(Path javaHome) {
-        this(javaHome, null);
+    public static Path javaCommand(Path jreDir) {
+        return assertFile(assertDir(jreDir).resolve(JAVA_CMD_PATH));
     }
 
-    public JavaHome(Path javaHome, Runtime.Version version) {
+    public static JavaRuntime current(boolean assertJdk) {
+        return new JavaRuntime(CURRENT_JAVA_HOME_DIR, null, assertJdk);
+    }
+
+    public static JavaRuntime jdk(Path jdkDir) {
+        return new JavaRuntime(jdkDir, null, true);
+    }
+
+    public static JavaRuntime jdk(Path jdkDir, Runtime.Version version) {
+        return new JavaRuntime(jdkDir, version, true);
+    }
+
+    public static JavaRuntime jre(Path jreDir, Runtime.Version version) {
+        return new JavaRuntime(jreDir, requireNonNull(version), false);
+    }
+
+    private JavaRuntime(Path javaHome, Runtime.Version version, boolean assertJdk) {
+        javaCommand(javaHome); // Assert valid.
         this.javaHome = assertDir(javaHome);
         this.jmodsDir = javaHome.resolve(JMODS_DIR);
         if (Files.isDirectory(jmodsDir)) {
             this.jmodFiles = listFiles(jmodsDir, fileName -> fileName.endsWith(JMOD_SUFFIX));
             this.version = isCurrent() ? Runtime.version() : findVersion();
             this.modules = jmodFiles.stream()
-                                    .collect(Collectors.toMap(JavaHome::moduleNameOf, identity()));
+                                    .collect(Collectors.toMap(JavaRuntime::moduleNameOf, identity()));
         } else if (version == null) {
             throw new IllegalArgumentException("Version required in a Java home without 'jmods' dir: " + javaHome);
         } else {
             this.version = version;
             this.jmodFiles = List.of();
             this.modules = Map.of();
+        }
+        if (assertJdk) {
+            assertHasJmodFiles();
         }
     }
 
@@ -94,11 +140,10 @@ public class JavaHome {
         return javaHome.equals(CURRENT_JAVA_HOME_DIR);
     }
 
-    public JavaHome assertHasJmodFiles() {
+    private void assertHasJmodFiles() {
         if (jmodFiles.isEmpty()) {
-            throw new IllegalArgumentException("Does not contain .jmod files: " + javaHome);
+            throw new IllegalArgumentException("Not a JDK (no .jmod files found): " + javaHome);
         }
-        return this;
     }
 
     public Set<String> moduleNames() {

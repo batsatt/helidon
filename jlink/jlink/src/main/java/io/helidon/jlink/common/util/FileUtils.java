@@ -35,7 +35,6 @@ import static java.util.Objects.requireNonNull;
 public class FileUtils {
     public static final Path CURRENT_JAVA_HOME_DIR = Paths.get(System.getProperty("java.home"));
     public static final Path CURRENT_DIR = Paths.get(".").toAbsolutePath();
-    private static final String IMAGE_SUFFIX = "-image";
 
     public static Path ensureDirectory(Path path, FileAttribute<?>... attrs) {
         if (Files.exists(requireNonNull(path))) {
@@ -117,18 +116,10 @@ public class FileUtils {
         }
     }
 
-    private FileUtils() {
-    }
-
-    public static Path prepareImageDir(Path imageDir, Path appJar) throws IOException {
-        if (imageDir == null) {
-            final String jarName = appJar.getFileName().toString();
-            final String dirName = jarName.substring(0, jarName.lastIndexOf('.')) + IMAGE_SUFFIX;
-            imageDir = CURRENT_DIR.resolve(dirName);
-        }
-        if (Files.exists(imageDir)) {
-            if (Files.isDirectory(imageDir)) {
-                Files.walk(imageDir)
+    public static Path deleteDirectory(Path directory) throws IOException {
+        if (Files.exists(directory)) {
+            if (Files.isDirectory(directory)) {
+                Files.walk(directory)
                      .sorted(Comparator.reverseOrder())
                      .forEach(file -> {
                          try {
@@ -138,9 +129,12 @@ public class FileUtils {
                          }
                      });
             } else {
-                throw new IllegalArgumentException(imageDir + " is not a directory");
+                throw new IllegalArgumentException(directory + " is not a directory");
             }
         }
-        return imageDir;
+        return directory;
+    }
+
+    private FileUtils() {
     }
 }

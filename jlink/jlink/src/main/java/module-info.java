@@ -16,6 +16,7 @@
 module helidon.jlink {
     exports io.helidon.jlink.image.modules.plugins;
     exports io.helidon.jlink.common.logging;
+    exports io.helidon.jlink.common.util;
 
     requires jdk.jlink;
     requires java.instrument;

@@ -24,6 +24,7 @@ import java.util.spi.ToolProvider;
 
 import io.helidon.jlink.common.logging.Log;
 import io.helidon.jlink.common.util.FileUtils;
+import io.helidon.jlink.common.util.JavaRuntime;
 import io.helidon.jlink.image.modules.plugins.ApplicationContext;
 import io.helidon.jlink.image.modules.plugins.BootOrderPlugin;
 import io.helidon.jlink.common.util.ClassDataSharing;
@@ -34,7 +35,7 @@ import jdk.tools.jlink.plugin.PluginException;
 import static io.helidon.jlink.common.util.FileUtils.CURRENT_JAVA_HOME_DIR;
 
 /**
- * Create a JDK image by mapping all jars of a Helidon application into modules and linking
+ * Create a custom JRE by mapping all jars of a Helidon application into modules and linking
  * them via jlink, then adding a CDS archive.
  */
 public class ModulesLinker {
@@ -47,10 +48,10 @@ public class ModulesLinker {
          final ModulesLinker linker = new ModulesLinker().configure(args)
                                                          .buildHelidonPluginArguments()
                                                          .buildJlinkArguments()
-                                                         .buildImage()
+                                                         .buildJre()
                                                          .addCdsArchive()
                                                          .complete();
-         return linker.imageDir;
+         return linker.jreDirectory;
     }
 
     private static final Log LOG = Log.getLog("linker");
@@ -58,27 +59,27 @@ public class ModulesLinker {
     private final List<String> jlinkArgs;
     private String[] cmdLineArgs;
     private boolean stripDebug;
-    private Path javaHome;
+    private Path jdk;
     private Path patchesDir;
     private Path appModulePath;
-    private Path imageDir;
+    private Path jreDirectory;
     private StringBuilder helidonPluginArgs;
     private final ToolProvider jlink;
 
     private ModulesLinker() {
         this.jlinkArgs = new ArrayList<>();
-        this.javaHome = CURRENT_JAVA_HOME_DIR;
+        this.jdk = CURRENT_JAVA_HOME_DIR;
         this.helidonPluginArgs = new StringBuilder();
         this.jlink = ToolProvider.findFirst("jlink").orElseThrow();
         System.setProperty("jlink.debug", "true"); // TODO
     }
 
-    private ModulesLinker buildImage() {
+    private ModulesLinker buildJre() {
         final int result = jlink.run(System.out, System.err, jlinkArgs.toArray(new String[0]));
         if (result != 0) {
             throw new Error("Image creation failed.");
         }
-        LOG.info("Image created: %s", imageDir);
+        LOG.info("Image created: %s", jreDirectory);
         return this;
     }
 
@@ -86,7 +87,7 @@ public class ModulesLinker {
         try {
             final ApplicationContext context = ApplicationContext.get();
             final ClassDataSharing cds = ClassDataSharing.builder()
-                                                         .javaHome(imageDir)
+                                                         .jre(jreDirectory)
                                                          .moduleName(context.applicationModuleName())
                                                          .showOutput(true)
                                                          .build();
@@ -98,22 +99,25 @@ public class ModulesLinker {
     }
 
     private ModulesLinker complete() {
-        LOG.info("Image completed: %s", imageDir);
+        LOG.info("Image completed: %s", jreDirectory);
         return this;
     }
 
     private ModulesLinker configure(String... args) throws Exception {
+        boolean replace = true;
         this.cmdLineArgs = args;
         for (int i = 0; i < args.length; i++) {
             final String arg = args[i];
             if (arg.startsWith("--")) {
                 if (arg.equalsIgnoreCase("--patchesDir")) {
                     patchesDir = FileUtils.assertNonEmptyDir(Paths.get(argAt(++i)));
-                } else if (arg.equalsIgnoreCase("--javaHome")) {
-                    javaHome = FileUtils.assertDir(Paths.get(argAt(++i)));
-                    FileUtils.assertDir(javaHome.resolve("jmods"));
-                } else if (arg.equalsIgnoreCase("--imageDir")) {
-                    imageDir = Paths.get(argAt(++i));
+                } else if (arg.equalsIgnoreCase("--jdk")) {
+                    jdk = FileUtils.assertDir(Paths.get(argAt(++i)));
+                    FileUtils.assertDir(jdk.resolve("jmods"));
+                } else if (arg.equalsIgnoreCase("--jre")) {
+                    jreDirectory = Paths.get(argAt(++i));
+                } else if (arg.equalsIgnoreCase("--replace")) {
+                    replace = Boolean.parseBoolean(argAt(++i));
                 } else if (arg.equalsIgnoreCase("--verbose")) {
                     addArgument("--verbose");
                 } else if (arg.equalsIgnoreCase("--strip-debug")) {
@@ -136,7 +140,7 @@ public class ModulesLinker {
             FileUtils.assertDir(appModulePath.getParent().resolve("libs"));
         }
 
-        imageDir = FileUtils.prepareImageDir(imageDir, appModulePath);
+        jreDirectory = JavaRuntime.prepareJreDirectory(jreDirectory, appModulePath, replace);
 
         return this;
     }
@@ -156,7 +160,7 @@ public class ModulesLinker {
 
         // Tell our plugin what JDK to use
 
-        appendHelidonPluginArg(HelidonPlugin.JAVA_HOME_KEY, javaHome);
+        appendHelidonPluginArg(HelidonPlugin.JDK_KEY, jdk);
 
         // Tell our plugin where the patches live, if provided
 
@@ -181,7 +185,7 @@ public class ModulesLinker {
 
         // Tell jlink the directory to create and write the image
 
-        addArgument("--output", imageDir);
+        addArgument("--output", jreDirectory);
 
         // Since we expect Helidon and dependencies to leverage automatic modules, we
         // can't configure jlink with the app and libs directly. It requires some module,

@@ -105,9 +105,9 @@ public class AutomaticArchive extends DelegatingArchive {
             args.add(releaseFeatureVersion);
         }
 
-        if (context.isAlternateJavaHome()) {
+        if (context.isAlternateJdk()) {
             args.add("--system");
-            args.add(context.javaHome().toString());
+            args.add(context.jdk().toString());
         }
 
         args.add(modulePath.toString());
