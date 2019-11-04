@@ -47,6 +47,7 @@ init() {
     assertExists ${jlinkJar}
     jlinkModule=${mainModule}
     jlinkPath=${jlinkJar}
+    appArgs="--cds --replace"
     unset jars
     unset dir
 
@@ -65,7 +66,7 @@ init() {
         [[ ${dir} ]] && jlinkPath=${jlinkDir}
         jlinkPath+=":${jandexJar}"
     else
-        [[ -d ${patchesDir} ]] && appendVar appArgs "--patchesDir ${patchesDir}" || fail "${patchesDir} not found"
+        [[ -d ${patchesDir} ]] && appendVar appArgs "--patches ${patchesDir}" || fail "${patchesDir} not found"
         [[ ${dir} ]] && jlinkModule="${mainModule}/${modulesMainClass}"
         [[ ${dir} ]] && jlinkPath=${jlinkDir}
         jlinkPath+=":${jlinkLibs}"

@@ -21,6 +21,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 
+import io.helidon.jlink.TestJars;
 import io.helidon.jlink.common.util.ClassDataSharing;
 
 import org.junit.jupiter.api.Test;
@@ -40,13 +41,13 @@ class ClassDataSharingTest {
 
     @Test
     void testQuickstartMp() throws Exception {
-        Path applicationJar = Paths.get("/Users/batsatt/dev/helidon-quickstart-mp/target/helidon-quickstart-mp.jar"); // TODO
-        Path weldJrtJar = Paths.get("/Users/batsatt/dev/helidon/jlink/weld/target/helidon-weld-jrt.jar"); // TODO
+        Path mainJar = TestJars.helidonMpJar();
+        Path weldJrtJar = TestJars.weldJrtJar();
         ClassDataSharing cds = ClassDataSharing.builder()
                                                .jre(JAVA_HOME)
-                                               .applicationJar(applicationJar)
+                                               .applicationJar(mainJar)
                                                .createArchive(false)
-                                               .showOutput(true)
+                                               .showOutput(false)
                                                .build();
         assertThat(cds, is(not(nullValue())));
         assertThat(cds.classList(), is(not(nullValue())));
@@ -62,10 +63,10 @@ class ClassDataSharingTest {
 
         cds = ClassDataSharing.builder()
                               .jre(JAVA_HOME)
-                              .applicationJar(applicationJar)
+                              .applicationJar(mainJar)
                               .classListFile(cds.classListFile())
                               .weldJrtJar(weldJrtJar)
-                              .showOutput(true)
+                              .showOutput(false)
                               .build();
 
         assertThat(cds.classListFile(), is(not(nullValue())));

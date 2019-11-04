@@ -48,6 +48,7 @@ public class JarsLinker {
      *
      * @param args Command line arguments.
      * @throws Exception If an error occurs.
+     * @see Configuration.Builder#commandLine(String...)
      */
     public static void main(String... args) throws Exception {
         linker(Configuration.builder()
@@ -87,7 +88,7 @@ public class JarsLinker {
         buildJlinkArguments();
         buildJre();
         copyJars();
-        addCdsArchive();
+        buildCdsArchive();
         complete();
         return config.jreDirectory();
     }
@@ -146,7 +147,7 @@ public class JarsLinker {
         this.jreMainJar = application.install(jre);
     }
 
-    private void addCdsArchive() {
+    private void buildCdsArchive() {
         if (config.cds()) {
             try {
                 ClassDataSharing.builder()

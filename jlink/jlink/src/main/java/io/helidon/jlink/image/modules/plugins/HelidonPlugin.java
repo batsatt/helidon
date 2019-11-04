@@ -67,7 +67,7 @@ import static java.util.stream.Collectors.toSet;
 import static jdk.tools.jlink.internal.Archive.Entry.EntryType.CLASS_OR_RESOURCE;
 
 /**
- * Generate an image from a Helidon app, even if it contains automatic modules.
+ * Generate a custom JRE from a Helidon application, even if it contains automatic modules.
  */
 public class HelidonPlugin implements Plugin {
     public static final String NAME = "helidon";

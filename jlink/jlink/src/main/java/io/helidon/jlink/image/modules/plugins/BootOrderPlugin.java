@@ -139,7 +139,7 @@ public class BootOrderPlugin implements Plugin {
           .filter(entry -> !copied.contains(entry.path()))
           .forEach(out::add);
 
-        LOG.info("Creating image");
+        LOG.info("Creating JRE");
         return out.build();
     }
 }

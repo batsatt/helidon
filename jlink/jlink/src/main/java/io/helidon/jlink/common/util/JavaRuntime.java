@@ -50,7 +50,6 @@ public class JavaRuntime {
     private final Path javaHome;
     private final Runtime.Version version;
     private final Path jmodsDir;
-    private final List<Path> jmodFiles;
     private final Map<String, Path> modules;
 
     /**
@@ -87,40 +86,61 @@ public class JavaRuntime {
         return assertFile(assertDir(jreDir).resolve(JAVA_CMD_PATH));
     }
 
+    public static Path assertJre(Path jreDir) {
+        if (!Files.isDirectory(requireNonNull(jreDir))) {
+            throw new IllegalArgumentException("Directory not found: " + jreDir);
+        }
+        final Path javaCommand = jreDir.resolve(JAVA_CMD_PATH);
+        if (!Files.isRegularFile(javaCommand)) {
+            throw new IllegalArgumentException("Not a valid JRE (" + javaCommand + " not found): " + jreDir);
+        }
+        return jreDir;
+    }
+
+    public static Path assertJdk(Path jdkDir) {
+        final Path jmodsDir = assertJre(jdkDir).resolve(JMODS_DIR);
+        final Path javaBase = jmodsDir.resolve(JAVA_BASE_JMOD);
+        if (!Files.isDirectory(jmodsDir) || !Files.exists(javaBase)) {
+            throw new IllegalArgumentException("Not a valid JDK (" + JAVA_BASE_JMOD + " not found): " + jdkDir);
+        }
+        javaCommand(jdkDir);
+        return jdkDir;
+    }
+
     public static JavaRuntime current(boolean assertJdk) {
-        return new JavaRuntime(CURRENT_JAVA_HOME_DIR, null, assertJdk);
+        final Path jreDir = CURRENT_JAVA_HOME_DIR;
+        if (assertJdk) {
+            assertJdk(jreDir);
+        }
+        return new JavaRuntime(jreDir, null);
     }
 
     public static JavaRuntime jdk(Path jdkDir) {
-        return new JavaRuntime(jdkDir, null, true);
+        return new JavaRuntime(assertJdk(jdkDir), null);
     }
 
     public static JavaRuntime jdk(Path jdkDir, Runtime.Version version) {
-        return new JavaRuntime(jdkDir, version, true);
+        return new JavaRuntime(assertJdk(jdkDir), version);
     }
 
     public static JavaRuntime jre(Path jreDir, Runtime.Version version) {
-        return new JavaRuntime(jreDir, requireNonNull(version), false);
+        return new JavaRuntime(jreDir, requireNonNull(version));
     }
 
-    private JavaRuntime(Path javaHome, Runtime.Version version, boolean assertJdk) {
+    private JavaRuntime(Path javaHome, Runtime.Version version) {
         javaCommand(javaHome); // Assert valid.
         this.javaHome = assertDir(javaHome);
         this.jmodsDir = javaHome.resolve(JMODS_DIR);
         if (Files.isDirectory(jmodsDir)) {
-            this.jmodFiles = listFiles(jmodsDir, fileName -> fileName.endsWith(JMOD_SUFFIX));
+            final List<Path> jmodFiles = listFiles(jmodsDir, fileName -> fileName.endsWith(JMOD_SUFFIX));
             this.version = isCurrent() ? Runtime.version() : findVersion();
             this.modules = jmodFiles.stream()
                                     .collect(Collectors.toMap(JavaRuntime::moduleNameOf, identity()));
         } else if (version == null) {
-            throw new IllegalArgumentException("Version required in a Java home without 'jmods' dir: " + javaHome);
+            throw new IllegalArgumentException("Version required in a Java Runtime without 'jmods' dir: " + javaHome);
         } else {
             this.version = version;
-            this.jmodFiles = List.of();
             this.modules = Map.of();
-        }
-        if (assertJdk) {
-            assertHasJmodFiles();
         }
     }
 
@@ -140,9 +160,10 @@ public class JavaRuntime {
         return javaHome.equals(CURRENT_JAVA_HOME_DIR);
     }
 
-    private void assertHasJmodFiles() {
-        if (jmodFiles.isEmpty()) {
-            throw new IllegalArgumentException("Not a JDK (no .jmod files found): " + javaHome);
+    private void assertHasJavaBaseJmod() {
+        final Path javaBase = jmodsDir.resolve(JAVA_BASE_JMOD);
+        if (!Files.isDirectory(jmodsDir) || !Files.exists(javaBase)) {
+            throw new IllegalArgumentException("Not a valid JDK (" + JAVA_BASE_JMOD + " not found): " + javaHome);
         }
     }
 
@@ -175,7 +196,7 @@ public class JavaRuntime {
     }
 
     private Runtime.Version findVersion() {
-        assertHasJmodFiles();
+        assertHasJavaBaseJmod();
         final Path javaBase = assertFile(jmodsDir.resolve(JAVA_BASE_JMOD));
         try {
             final ZipFile zip = new ZipFile(javaBase.toFile());

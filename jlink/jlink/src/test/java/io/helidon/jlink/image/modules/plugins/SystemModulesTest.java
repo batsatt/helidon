@@ -1,4 +1,4 @@
-/*
+package io.helidon.jlink.image.modules.plugins;/*
  * Copyright (c) 2019 Oracle and/or its affiliates. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,15 +28,13 @@ import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Set;
 
-import org.junit.jupiter.api.Test;
-
 /**
- * Unit test for class.
+ * Test generated SystemModules classes.
  */
-class ImageTest {
+class SystemModulesTest {
     // VM Options: -ea --add-exports=java.base/jdk.internal.module=ALL-UNNAMED --add-exports=java.base/jdk.internal.misc=ALL-UNNAMED --add-opens=java.base/jdk.internal.module=ALL-UNNAMED --add-reads=UNNAMED=java.base
-    @Test
-    public void testSomething() throws Exception {
+    // @Test
+    public void testSystemModules() throws Exception {
 
         // TODO: switch to read from generated image !!
 

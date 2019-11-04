@@ -14,81 +14,48 @@
  * limitations under the License.
  */
 
-package io.helidon.jlink.image.jars;
+package io.helidon.jlink.image.modules;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 import io.helidon.jlink.TestJars;
 import io.helidon.jlink.common.util.FileUtils;
 
-import org.junit.jupiter.api.Test;
-
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
-
 /**
- * Unit test for class {@link JarsLinker}.
+ * Unit test for class {@link ModulesLinker}.
  */
-class JarsLinkerTest {
+class ModulesLinkerTest {
 
-    @Test
-    void testQuickstartSeNoCDS() throws Exception {
-        Path mainJar = TestJars.helidonSeJar();
-        Path targetDir = mainJar.getParent();
-        Configuration config = Configuration.builder()
-                                            .jreDirectory(targetDir.resolve("se-jars-jre"))
-                                            .mainJar(mainJar)
-                                            .replace(true)
-                                            .cds(false)
-                                            .build();
-        Path jre = JarsLinker.linker(config).link();
-
-        FileUtils.assertDir(jre);
-        Path appDir = FileUtils.assertDir(jre.resolve("app"));
-        Path appLibDir = FileUtils.assertDir(appDir.resolve("libs"));
-
-        Path libDir = FileUtils.assertDir(jre.resolve("lib"));
-        Path archiveFile = libDir.resolve("server.jsa");
-        assertThat(Files.exists(archiveFile), is(false));
-    }
-
-    @Test
+    // @Test TODO: must run external process so can use agent jar
     void testQuickstartSe() throws Exception {
         Path mainJar = TestJars.helidonSeJar();
         Path targetDir = mainJar.getParent();
         Configuration config = Configuration.builder()
-                                            .jreDirectory(targetDir.resolve("se-jars-jre"))
+                                            .jreDirectory(targetDir.resolve("se-modules-jre"))
                                             .mainJar(mainJar)
                                             .replace(true)
                                             .cds(true)
                                             .build();
-        Path jre = JarsLinker.linker(config).link();
+        Path jre = ModulesLinker.linker(config).link();
 
         FileUtils.assertDir(jre);
-        Path appDir = FileUtils.assertDir(jre.resolve("app"));
-        Path appLibDir = FileUtils.assertDir(appDir.resolve("libs"));
-
         Path libDir = FileUtils.assertDir(jre.resolve("lib"));
         Path archiveFile = FileUtils.assertFile(libDir.resolve("server.jsa"));
     }
 
-    @Test
+    // @Test TODO: must run external process so can use agent jar
     void testQuickstartMp() throws Exception {
         Path mainJar = TestJars.helidonMpJar();
         Path targetDir = mainJar.getParent();
         Configuration config = Configuration.builder()
-                                            .jreDirectory(targetDir.resolve("mp-jars-jre"))
+                                            .jreDirectory(targetDir.resolve("mp-modules-jre"))
                                             .mainJar(mainJar)
                                             .replace(true)
                                             .cds(true)
                                             .build();
-        Path jre = JarsLinker.linker(config).link();
+        Path jre = ModulesLinker.linker(config).link();
 
         FileUtils.assertDir(jre);
-        Path appDir = FileUtils.assertDir(jre.resolve("app"));
-        Path appLibDir = FileUtils.assertDir(appDir.resolve("libs"));
-
         Path libDir = FileUtils.assertDir(jre.resolve("lib"));
         Path archiveFile = FileUtils.assertFile(libDir.resolve("server.jsa"));
     }
