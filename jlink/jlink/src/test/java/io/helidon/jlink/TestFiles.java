@@ -69,7 +69,7 @@ public class TestFiles {
         return assertDir(PROJECT_DIR.resolve("etc/patches"));
     }
 
-    public static Path weldJrtClassesDir() {
-        return assertFile(PROJECT_DIR.resolve("weld/target/classes"));
+    public static Path weldJrtJar() {
+        return assertFile(OUR_TARGET_DIR.resolve("lib/helidon-weld-jrt.jar"));
     }
 }

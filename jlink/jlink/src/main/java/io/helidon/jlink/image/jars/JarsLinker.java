@@ -135,10 +135,10 @@ public class JarsLinker {
     }
 
     private void buildJre() {
-        LOG.info("Building JRE: %s", config.jreDirectory());
+        LOG.info("Building Helidon JRE: %s", config.jreDirectory());
         final int result = jlink.run(System.out, System.err, jlinkArgs.toArray(new String[0]));
         if (result != 0) {
-            throw new Error("JRE creation failed.");
+            throw new Error("Helidon JRE creation failed.");
         }
         jre = JavaRuntime.jre(config.jreDirectory(), config.jdk().version());
     }
@@ -165,7 +165,7 @@ public class JarsLinker {
     private void complete(long startTime) {
         final long elapsed = System.currentTimeMillis() - startTime;
         final float startSeconds = elapsed / 1000F;
-        LOG.info("JRE completed in %.1f seconds: %s", startSeconds, config.jreDirectory());
+        LOG.info("Helidon JRE completed in %.1f seconds: %s", startSeconds, config.jreDirectory());
     }
 
     private void addArgument(String argument) {

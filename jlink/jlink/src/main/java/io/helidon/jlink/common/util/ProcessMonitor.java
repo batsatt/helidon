@@ -24,13 +24,14 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Future;
+import java.util.function.Consumer;
 
 import io.helidon.jlink.common.logging.Log;
 
 import static java.util.Objects.requireNonNull;
 
 /**
- * Executes a process and waits for completion, monitoring and optionally logging the output.
+ * Executes a process and waits for completion, monitoring and optionally logging the combined output.
  */
 public class ProcessMonitor {
     private static final Log LOG = Log.getLog("processes");
@@ -39,7 +40,9 @@ public class ProcessMonitor {
     private final ProcessBuilder builder;
     private final String description;
     private final Log executionLog;
-    private final Log monitorLog;
+    private final boolean capturing;
+    private final List<String> capturedOutput;
+    private final Consumer<String> processOutput;
 
     /**
      * Returns a new monitor for the given {@link ProcessBuilder}.
@@ -57,7 +60,14 @@ public class ProcessMonitor {
         this.builder = requireNonNull(builder);
         this.description = requireNonNull(description);
         this.executionLog = log == null ? LOG : log;
-        this.monitorLog = log;
+        this.capturedOutput = new ArrayList<>();
+        if (log == null) {
+            capturing = true;
+            processOutput = capturedOutput::add;
+        } else {
+            capturing = false;
+            processOutput = line -> log.info(line);
+        }
     }
 
     /**
@@ -66,58 +76,36 @@ public class ProcessMonitor {
      * @throws Exception If the process fails.
      */
     public void run() throws Exception {
-        executionLog.info(monitorLog == null ? description : (description + EOL));
+        executionLog.info(capturing ? description : (description + EOL));
+        builder.redirectErrorStream(true); // Merge streams
         final Process process = builder.start();
-        final StreamConsumer out = new StreamConsumer(process.getInputStream(), monitorLog);
-        final StreamConsumer err = new StreamConsumer(process.getErrorStream(), monitorLog);
-        final Future outFuture = EXECUTOR.submit(out);
-        final Future errFuture = EXECUTOR.submit(err);
+        final Future output = EXECUTOR.submit(new StreamConsumer(process.getInputStream(), processOutput));
         int exitCode = process.waitFor();
-        outFuture.cancel(true);
-        errFuture.cancel(true);
+        output.cancel(true);
         if (exitCode != 0) {
-            final String message = description + " FAILED with exit code " + exitCode;
-            executionLog.warn(message);
-            if (monitorLog == null) {
-                dump(out, "out", executionLog);
-                dump(err, "err", executionLog);
+            final StringBuilder message = new StringBuilder();
+            message.append(description).append(" failed with exit code ").append(exitCode);
+            if (capturing) {
+                message.append(EOL);
+                capturedOutput.forEach(line -> message.append("    ").append(line).append(EOL));
             }
-            throw new IllegalStateException(message);
-        }
-    }
-
-    private void dump(StreamConsumer stream, String name, Log log) {
-        final List<String> lines = stream.lines();
-        if (!lines.isEmpty()) {
-            log.info("--- process " + name + " ---");
-            lines.forEach(log::info);
+            throw new Error(message.toString());
         }
     }
 
     private static class StreamConsumer implements Runnable {
         private final InputStream inputStream;
-        private final List<String> lines;
-        private final Log log;
+        private final Consumer<String> output;
 
-        StreamConsumer(InputStream inputStream, Log log) {
+        StreamConsumer(InputStream inputStream, Consumer<String> output) {
             this.inputStream = inputStream;
-            this.lines = new ArrayList<>();
-            this.log = log;
-        }
-
-        List<String> lines() {
-            return lines;
+            this.output = output;
         }
 
         @Override
         public void run() {
             new BufferedReader(new InputStreamReader(inputStream)).lines()
-                                                                  .forEach(line -> {
-                                                                      if (log != null) {
-                                                                          log.info(line);
-                                                                      }
-                                                                      lines.add(line);
-                                                                  });
+                                                                  .forEach(output);
         }
     }
 }

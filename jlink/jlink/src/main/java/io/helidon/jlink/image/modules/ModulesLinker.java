@@ -163,9 +163,9 @@ public class ModulesLinker {
     private void buildJre() {
         final int result = jlink.run(System.out, System.err, jlinkArgs.toArray(new String[0]));
         if (result != 0) {
-            throw new Error("JRE creation failed.");
+            throw new Error("Helidon JRE creation failed.");
         }
-        LOG.info("JRE created: %s", config.jreDirectory());
+        LOG.info("Helidon JRE created: %s", config.jreDirectory());
     }
 
     private void buildCdsArchive() {
@@ -187,7 +187,7 @@ public class ModulesLinker {
     private ModulesLinker complete(long startTime) {
         final long elapsed = System.currentTimeMillis() - startTime;
         final float startSeconds = elapsed / 1000F;
-        LOG.info("JRE completed in %.1f seconds: %s", startSeconds, config.jreDirectory());
+        LOG.info("Helidon JRE completed in %.1f seconds: %s", startSeconds, config.jreDirectory());
         return this;
     }
 
