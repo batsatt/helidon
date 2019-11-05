@@ -60,9 +60,7 @@ class ModulesLinkerTest {
         command.add("--module");
         command.add("helidon.jre/" + ModulesLinker.class.getName());
         command.add("--cds");
-        command.add("true");
         command.add("--replace");
-        command.add("true");
         command.add("--jre");
         command.add(jreDirectory.toString());
         command.add("--patches");

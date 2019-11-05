@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.helidon.jre.modules;
+package io.helidon.jre.jars;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -24,18 +24,17 @@ import io.helidon.jre.common.util.FileUtils;
 import io.helidon.jre.common.util.JavaRuntime;
 
 import static io.helidon.jre.common.util.FileUtils.CURRENT_JAVA_HOME_DIR;
+import static io.helidon.jre.common.util.FileUtils.assertDir;
 import static io.helidon.jre.common.util.FileUtils.assertFile;
-import static java.lang.Boolean.parseBoolean;
 import static java.util.Objects.requireNonNull;
 
 /**
- * ModulesLinker configuration.
+ * JarsLinker configuration.
  */
 public class Configuration {
+    private JavaRuntime jdk;
     private Path mainJar;
-    private Path jdkDirectory;
     private Path jreDirectory;
-    private Path patchesDirectory;
     private boolean verbose;
     private boolean stripDebug;
     private boolean cds;
@@ -50,22 +49,21 @@ public class Configuration {
     }
 
     private Configuration(Builder builder) {
+        this.jdk = builder.jdk;
         this.mainJar = builder.mainJar;
-        this.jdkDirectory = builder.jdkDirectory;
         this.jreDirectory = builder.jreDirectory;
-        this.patchesDirectory = builder.patchesDirectory;
         this.verbose = builder.verbose;
         this.stripDebug = builder.stripDebug;
         this.cds = builder.cds;
     }
 
     /**
-     * Returns the JDK directory from which to create the JRE.
+     * Returns the JDK from which to create the JRE.
      *
-     * @return The directory..
+     * @return The {@link JavaRuntime}.
      */
-    public Path jdkDirectory() {
-        return jdkDirectory;
+    public JavaRuntime jdk() {
+        return jdk;
     }
 
     /**
@@ -75,15 +73,6 @@ public class Configuration {
      */
     public Path jreDirectory() {
         return jreDirectory;
-    }
-
-    /**
-     * Returns the JDK patches directory.
-     *
-     * @return The directory.
-     */
-    public Path patchesDirectory() {
-        return patchesDirectory;
     }
 
     /**
@@ -129,10 +118,10 @@ public class Configuration {
         private Path mainJar;
         private Path jdkDirectory;
         private Path jreDirectory;
-        private Path patchesDirectory;
         private boolean replace;
         private boolean verbose;
         private boolean stripDebug;
+        private JavaRuntime jdk;
         private boolean cds;
 
         private Builder() {
@@ -145,13 +134,12 @@ public class Configuration {
          *
          * @param args The arguments: [options] path-to-main-jar. Options:
          * <pre>
-         *     --jdk directory          The JDK directory from which to create the JRE. Defaults to current.
-         *     --patches directory      The directory containing JDK patches.
-         *     --jre directory          The directory at which to create the JRE.
-         *     --replace true|false     Whether or not to delete the JRE directory if it exists. Defaults to false.
-         *     --cds true|false         Whether or not to create a CDS archive. Defaults to true.
-         *     --verbose true|false     Whether or not to log detail messages. Defaults to false.
-         *     --stripDebug true|false  Whether or not to strip debug information from JDK classes. Defaults to false.
+         *     --jdk directory       The JDK directory from which to create the JRE. Defaults to current.
+         *     --jre directory       The directory at which to create the JRE.
+         *     --replace             Delete the JRE directory if it exists.
+         *     --cds                 Create a CDS archive.
+         *     --verbose             Log detail messages.
+         *     --stripDebug          Strip debug information from JDK classes. Defaults to false.
          * </pre>
          * @return The builder.
          */
@@ -161,14 +149,12 @@ public class Configuration {
                 if (arg.startsWith("--")) {
                     if (arg.equalsIgnoreCase("--jdk")) {
                         jdkDirectory(Paths.get(argAt(++i, args)));
-                    } else if (arg.equalsIgnoreCase("--patches")) {
-                        patchesDirectory(Paths.get(argAt(++i, args)));
                     } else if (arg.equalsIgnoreCase("--jre")) {
                         jreDirectory(Paths.get(argAt(++i, args)));
                     } else if (arg.equalsIgnoreCase("--replace")) {
-                        replace(parseBoolean(argAt(++i, args)));
+                        replace(true);
                     } else if (arg.equalsIgnoreCase("--cds")) {
-                        cds(parseBoolean(argAt(++i, args)));
+                        cds(true);
                     } else if (arg.equalsIgnoreCase("--verbose")) {
                         verbose(true);
                     } else if (arg.equalsIgnoreCase("--stripDebug")) {
@@ -204,18 +190,7 @@ public class Configuration {
          * @return The builder.
          */
         public Builder jdkDirectory(Path jdkDirectory) {
-            this.jdkDirectory = JavaRuntime.assertJdk(jdkDirectory);
-            return this;
-        }
-
-        /**
-         * Sets the directory containing JDK patches.
-         *
-         * @param patchesDirectory The directory.
-         * @return The builder.
-         */
-        public Builder patchesDirectory(Path patchesDirectory) {
-            this.patchesDirectory = requireNonNull(patchesDirectory);
+            this.jdkDirectory = assertDir(jdkDirectory);
             return this;
         }
 
@@ -283,11 +258,9 @@ public class Configuration {
          */
         public Configuration build() throws IOException {
             if (mainJar == null) {
-                throw new IllegalArgumentException("mainJar required");
+                throw new IllegalArgumentException("applicationJar required");
             }
-            if (patchesDirectory == null) {
-                throw new IllegalArgumentException("patches directory required");
-            }
+            jdk = JavaRuntime.jdk(jdkDirectory);
             jreDirectory = JavaRuntime.prepareJreDirectory(jreDirectory, mainJar, replace);
             return new Configuration(this);
         }

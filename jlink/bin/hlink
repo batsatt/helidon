@@ -19,22 +19,22 @@ main() {
 }
 
 linkModules() {
-    ${javaHome}/bin/java ${jvmArgs} -javaagent:${agentJar} --module-path ${jlinkPath} --module ${jlinkModule} ${appArgs}
+    ${javaHome}/bin/java ${jvmArgs} -javaagent:${agentJar} --module-path ${jrePath} --module ${jreModule} ${appArgs}
 }
 
 linkJars() {
-    ${javaHome}/bin/java ${jvmArgs}  -cp ${jlinkPath} ${jarsMainClass} ${appArgs}
+    ${javaHome}/bin/java ${jvmArgs}  -cp ${jrePath} ${jarsMainClass} ${appArgs}
 }
 
 init() {
     readonly scriptName=$(basename "${0}")
     readonly binDir=$(dirname "${0}")
     readonly rootDir=$(cd "${binDir}"/..; pwd)
-    readonly agentJar="${rootDir}/agent/target/helidon-jlink-agent.jar"
-    readonly jlinkJar="${rootDir}/jlink/target/helidon-jlink.jar"
-    readonly jlinkLibs="${rootDir}/jlink/target/libs"
-    readonly jandexJar="${jlinkLibs}/jandex.jar"
-    readonly jlinkDir="${rootDir}/jlink/target/classes"
+    readonly agentJar="${rootDir}/agent/target/helidon-jre-agent.jar"
+    readonly jreJar="${rootDir}/jre/target/helidon-jre.jar"
+    readonly jreLibs="${rootDir}/jre/target/libs"
+    readonly jandexJar="${jreLibs}/jandex.jar"
+    readonly jreDir="${rootDir}/jre/target/classes"
     readonly patchesDir="${rootDir}/etc/patches"
     readonly mainModule="helidon.jre"
     readonly modulesMainClass="io.helidon.jre.modules.ModulesLinker"
@@ -44,9 +44,9 @@ init() {
 
     assertExists "${javaHome}/bin/java"
     assertExists ${agentJar}
-    assertExists ${jlinkJar}
-    jlinkModule=${mainModule}
-    jlinkPath=${jlinkJar}
+    assertExists ${jreJar}
+    jreModule=${mainModule}
+    jrePath=${jreJar}
     appArgs="--cds --replace"
     unset jars
     unset dir
@@ -63,13 +63,13 @@ init() {
     done
 
     if [[ ${jars} ]]; then
-        [[ ${dir} ]] && jlinkPath=${jlinkDir}
-        jlinkPath+=":${jandexJar}"
+        [[ ${dir} ]] && jrePath=${jreDir}
+        jrePath+=":${jandexJar}"
     else
         [[ -d ${patchesDir} ]] && appendVar appArgs "--patches ${patchesDir}" || fail "${patchesDir} not found"
-        [[ ${dir} ]] && jlinkModule="${mainModule}/${modulesMainClass}"
-        [[ ${dir} ]] && jlinkPath=${jlinkDir}
-        jlinkPath+=":${jlinkLibs}"
+        [[ ${dir} ]] && jreModule="${mainModule}/${modulesMainClass}"
+        [[ ${dir} ]] && jrePath=${jreDir}
+        jrePath+=":${jreLibs}"
     fi
 }
 

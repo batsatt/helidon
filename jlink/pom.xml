@@ -29,7 +29,7 @@
     <modules>
         <module>agent</module>
         <module>weld</module>
-        <module>jlink</module>
+        <module>jre</module>
     </modules>
 
     <dependencyManagement>
