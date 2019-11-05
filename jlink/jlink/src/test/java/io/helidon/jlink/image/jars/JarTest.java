@@ -18,7 +18,7 @@ package io.helidon.jlink.image.jars;
 
 import java.nio.file.Path;
 
-import io.helidon.jlink.TestJars;
+import io.helidon.jlink.TestFiles;
 
 import org.junit.jupiter.api.Test;
 
@@ -32,7 +32,7 @@ class JarTest {
 
     @Test
     void testSignedJar() {
-        Path signed = TestJars.signedJar();
+        Path signed = TestFiles.signedJar();
         Jar jar = Jar.open(signed);
         assertThat(jar.isSigned(), is(true));
     }

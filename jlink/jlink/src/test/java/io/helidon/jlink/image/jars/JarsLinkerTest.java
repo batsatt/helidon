@@ -19,7 +19,7 @@ package io.helidon.jlink.image.jars;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import io.helidon.jlink.TestJars;
+import io.helidon.jlink.TestFiles;
 import io.helidon.jlink.common.util.FileUtils;
 
 import org.junit.jupiter.api.Test;
@@ -34,7 +34,7 @@ class JarsLinkerTest {
 
     @Test
     void testQuickstartSeNoCDS() throws Exception {
-        Path mainJar = TestJars.helidonSeJar();
+        Path mainJar = TestFiles.helidonSeJar();
         Path targetDir = mainJar.getParent();
         Configuration config = Configuration.builder()
                                             .jreDirectory(targetDir.resolve("se-jars-jre"))
@@ -55,12 +55,13 @@ class JarsLinkerTest {
 
     @Test
     void testQuickstartSe() throws Exception {
-        Path mainJar = TestJars.helidonSeJar();
+        Path mainJar = TestFiles.helidonSeJar();
         Path targetDir = mainJar.getParent();
         Configuration config = Configuration.builder()
                                             .jreDirectory(targetDir.resolve("se-jars-jre"))
                                             .mainJar(mainJar)
                                             .replace(true)
+                                            .verbose(false)
                                             .cds(true)
                                             .build();
         Path jre = JarsLinker.linker(config).link();
@@ -75,7 +76,7 @@ class JarsLinkerTest {
 
     @Test
     void testQuickstartMp() throws Exception {
-        Path mainJar = TestJars.helidonMpJar();
+        Path mainJar = TestFiles.helidonMpJar();
         Path targetDir = mainJar.getParent();
         Configuration config = Configuration.builder()
                                             .jreDirectory(targetDir.resolve("mp-jars-jre"))

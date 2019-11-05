@@ -16,25 +16,21 @@
 
 package io.helidon.jlink.common.util;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.Future;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
 import io.helidon.jlink.common.logging.Log;
 
+import static io.helidon.jlink.common.util.FileUtils.assertDir;
+import static io.helidon.jlink.common.util.FileUtils.assertFile;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -103,8 +99,6 @@ public class ClassDataSharing {
         private static final String CLASS_SUFFIX = ".class";
         private static final String MODULE_INFO_NAME = "module-info";
         private static final String BEAN_ARCHIVE_SCANNER = "org/jboss/weld/environment/deployment/discovery/BeanArchiveScanner";
-        private static final String EOL = System.getProperty("line.separator");
-        private static final ExecutorService EXECUTOR = ForkJoinPool.commonPool();
         private Path javaHome;
         private String archiveDir;
         private String moduleName;
@@ -113,11 +107,12 @@ public class ClassDataSharing {
         private Path archiveFile;
         private List<String> classList;
         private boolean createArchive;
-        private boolean showOutput;
         private Path weldJrtJar;
         private String target;
         private String targetOption;
         private String targetDescription;
+        private Log outputLog;
+
 
         private Builder() {
             this.createArchive = true;
@@ -156,7 +151,7 @@ public class ClassDataSharing {
         }
 
         public Builder showOutput(boolean showOutput) {
-            this.showOutput = showOutput;
+            this.outputLog = showOutput ? LOG : null;
             return this;
         }
 
@@ -243,7 +238,6 @@ public class ClassDataSharing {
         }
 
         private void execute(String action, String... jvmArgs) throws Exception {
-            LOG.info(showOutput ? (action + EOL) : action);
             final ProcessBuilder builder = new ProcessBuilder();
             final List<String> command = new ArrayList<>();
 
@@ -256,31 +250,7 @@ public class ClassDataSharing {
 
             builder.directory(javaHome.toFile());
 
-            final Process process = builder.start();
-            final StreamConsumer out = new StreamConsumer(process.getInputStream(), showOutput);
-            final StreamConsumer err = new StreamConsumer(process.getErrorStream(), showOutput);
-            final Future outFuture = EXECUTOR.submit(out);
-            final Future errFuture = EXECUTOR.submit(err);
-            int exitCode = process.waitFor();
-            outFuture.cancel(true);
-            errFuture.cancel(true);
-            if (exitCode != 0) {
-                final String message = action + " FAILED.";
-                LOG.warn(message);
-                if (!showOutput) {
-                    dump(out, "out");
-                    dump(err, "err");
-                }
-                throw new IllegalStateException(message);
-            }
-        }
-
-        private static void dump(StreamConsumer stream, String name) {
-            final List<String> lines = stream.lines();
-            if (!lines.isEmpty()) {
-                LOG.info("--- process " + name + " ---");
-                lines.forEach(System.out::println);
-            }
+            ProcessMonitor.newMonitor(builder, action, outputLog).run();
         }
 
         private Path javaPath() {
@@ -293,53 +263,12 @@ public class ClassDataSharing {
             return file.toPath();
         }
 
-        private static Path assertDir(Path path) {
-            if (!Files.isDirectory(path)) {
-                throw new IllegalArgumentException(path + " is not a directory");
-            }
-            return path;
-        }
-
         private static Path assertJar(Path path) {
             final String fileName = assertFile(path).getFileName().toString();
             if (!fileName.endsWith(JAR_SUFFIX)) {
                 throw new IllegalArgumentException(path + " is not a jar");
             }
             return path;
-        }
-
-        private static Path assertFile(Path path) {
-            if (!Files.isRegularFile(path)) {
-                throw new IllegalArgumentException(path + " is not a file");
-            }
-            return path;
-        }
-    }
-
-    private static class StreamConsumer implements Runnable {
-        private final InputStream inputStream;
-        private final List<String> lines;
-        private final boolean showOutput;
-
-        StreamConsumer(InputStream inputStream, boolean showOutput) {
-            this.inputStream = inputStream;
-            this.lines = new ArrayList<>();
-            this.showOutput = showOutput;
-        }
-
-        List<String> lines() {
-            return lines;
-        }
-
-        @Override
-        public void run() {
-            new BufferedReader(new InputStreamReader(inputStream)).lines()
-                                                                  .forEach(line -> {
-                                                                      if (showOutput) {
-                                                                          System.out.println(line);
-                                                                      }
-                                                                      lines.add(line);
-                                                                  });
         }
     }
 }

@@ -83,13 +83,14 @@ public class JarsLinker {
      * @return The JRE directory.
      */
     public Path link() {
+        final long startTime = System.currentTimeMillis();
         buildApplication();
         collectJavaDependencies();
         buildJlinkArguments();
         buildJre();
         copyJars();
         buildCdsArchive();
-        complete();
+        complete(startTime);
         return config.jreDirectory();
     }
 
@@ -161,8 +162,10 @@ public class JarsLinker {
         }
     }
 
-    private void complete() {
-        LOG.info("JRE completed: %s", config.jreDirectory());
+    private void complete(long startTime) {
+        final long elapsed = System.currentTimeMillis() - startTime;
+        final float startSeconds = elapsed / 1000F;
+        LOG.info("JRE completed in %.1f seconds: %s", startSeconds, config.jreDirectory());
     }
 
     private void addArgument(String argument) {

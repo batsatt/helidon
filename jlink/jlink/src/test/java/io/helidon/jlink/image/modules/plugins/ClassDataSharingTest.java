@@ -21,7 +21,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 
-import io.helidon.jlink.TestJars;
+import io.helidon.jlink.TestFiles;
 import io.helidon.jlink.common.util.ClassDataSharing;
 
 import org.junit.jupiter.api.Test;
@@ -41,8 +41,8 @@ class ClassDataSharingTest {
 
     @Test
     void testQuickstartMp() throws Exception {
-        Path mainJar = TestJars.helidonMpJar();
-        Path weldJrtJar = TestJars.weldJrtJar();
+        Path mainJar = TestFiles.helidonMpJar();
+        Path weldJrtJar = TestFiles.weldJrtJar();
         ClassDataSharing cds = ClassDataSharing.builder()
                                                .jre(JAVA_HOME)
                                                .applicationJar(mainJar)

@@ -87,11 +87,12 @@ public class ModulesLinker {
      * @return The JRE directory.
      */
     public Path link() {
+        final long startTime = System.currentTimeMillis();
         buildHelidonPluginArguments();
         buildJlinkArguments();
         buildJre();
         buildCdsArchive();
-        complete();
+        complete(startTime);
         return config.jreDirectory();
     }
 
@@ -183,8 +184,10 @@ public class ModulesLinker {
         }
     }
 
-    private ModulesLinker complete() {
-        LOG.info("JRE completed: %s", config.jreDirectory());
+    private ModulesLinker complete(long startTime) {
+        final long elapsed = System.currentTimeMillis() - startTime;
+        final float startSeconds = elapsed / 1000F;
+        LOG.info("JRE completed in %.1f seconds: %s", startSeconds, config.jreDirectory());
         return this;
     }
 
