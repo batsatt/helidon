@@ -2,12 +2,12 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.helidon.jlink</groupId>
-        <artifactId>helidon-jlink-project</artifactId>
+        <groupId>io.helidon.jre</groupId>
+        <artifactId>helidon-jre-project</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>helidon-jlink</artifactId>
+    <artifactId>helidon-jre</artifactId>
 
     <dependencies>
         <dependency>
@@ -15,7 +15,7 @@
             <artifactId>jandex</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.helidon.jlink</groupId>
+            <groupId>io.helidon.jre</groupId>
             <artifactId>helidon-weld-jrt</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -38,7 +38,7 @@
                     <finalName>${project.artifactId}</finalName>
                     <archive>
                         <manifest>
-                            <mainClass>io.helidon.jlink.image.modules.ModulesLinker</mainClass>
+                            <mainClass>io.helidon.jre.modules.ModulesLinker</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
@@ -64,7 +64,7 @@
                             <destFileName>jandex.jar</destFileName>
                         </artifactItem>
                         <artifactItem>
-                            <groupId>io.helidon.jlink</groupId>
+                            <groupId>io.helidon.jre</groupId>
                             <artifactId>helidon-weld-jrt</artifactId>
                             <destFileName>helidon-weld-jrt.jar</destFileName>
                         </artifactItem>

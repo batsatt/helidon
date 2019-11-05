@@ -2,8 +2,8 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.helidon.jlink</groupId>
-        <artifactId>helidon-jlink-project</artifactId>
+        <groupId>io.helidon.jre</groupId>
+        <artifactId>helidon-jre-project</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
 

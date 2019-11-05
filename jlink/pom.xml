@@ -1,8 +1,8 @@
 <project>
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.helidon.jlink</groupId>
-    <artifactId>helidon-jlink-project</artifactId>
+    <groupId>io.helidon.jre</groupId>
+    <artifactId>helidon-jre-project</artifactId>
     <version>1.0-SNAPSHOT</version>
 
     <packaging>pom</packaging>
@@ -115,11 +115,11 @@
                     <source>11</source>
                     <target>11</target>
                     <compilerArgs>
-                        <arg>--add-exports=java.base/jdk.internal.module=helidon.jlink</arg>
-                        <arg>--add-exports=java.base/jdk.internal.org.objectweb.asm=helidon.jlink</arg>
-                        <arg>--add-exports=java.base/jdk.internal.org.objectweb.asm.commons=helidon.jlink</arg>
-                        <arg>--add-exports=jdk.jlink/jdk.tools.jlink.plugin=helidon.jlink</arg>
-                        <arg>--add-exports=jdk.jlink/jdk.tools.jlink.internal=helidon.jlink</arg>
+                        <arg>--add-exports=java.base/jdk.internal.module=helidon.jre</arg>
+                        <arg>--add-exports=java.base/jdk.internal.org.objectweb.asm=helidon.jre</arg>
+                        <arg>--add-exports=java.base/jdk.internal.org.objectweb.asm.commons=helidon.jre</arg>
+                        <arg>--add-exports=jdk.jlink/jdk.tools.jlink.plugin=helidon.jre</arg>
+                        <arg>--add-exports=jdk.jlink/jdk.tools.jlink.internal=helidon.jre</arg>
                     </compilerArgs>
                     <fork>true</fork>
                 </configuration>

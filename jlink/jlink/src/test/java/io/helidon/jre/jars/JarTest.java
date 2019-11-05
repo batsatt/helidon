@@ -13,20 +13,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-module helidon.jre {
-    exports io.helidon.jre.modules.plugins;
-    exports io.helidon.jre.common.logging;
-    exports io.helidon.jre.common.util;
 
-    requires jdk.jlink;
-    requires java.instrument;
-    requires java.logging;
-    requires jandex;
+package io.helidon.jre.jars;
 
-    /* This doesn't work since 'provides' are processed before the required add-exports:
+import java.nio.file.Path;
 
-        provides jdk.tools.jlink.plugin.Plugin with io.helidon.tool.image.jlink.plugins.HelidonPlugin;
+import io.helidon.jre.TestFiles;
 
-       Once jlink plugins are officially supported, the Agent won't be required
-     */
+import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.is;
+
+/**
+ * Unit test for class {@link Jar}.
+ */
+class JarTest {
+
+    @Test
+    void testSignedJar() {
+        Path signed = TestFiles.signedJar();
+        Jar jar = Jar.open(signed);
+        assertThat(jar.isSigned(), is(true));
+    }
 }

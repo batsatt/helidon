@@ -9,12 +9,12 @@
     </dependencies>
 
     <parent>
-        <groupId>io.helidon.jlink</groupId>
-        <artifactId>helidon-jlink-project</artifactId>
+        <groupId>io.helidon.jre</groupId>
+        <artifactId>helidon-jre-project</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>helidon-jlink-agent</artifactId>
+    <artifactId>helidon-jre-agent</artifactId>
 
     <build>
         <plugins>
@@ -26,7 +26,7 @@
                     <finalName>${artifactId}</finalName>
                     <archive>
                         <manifestEntries>
-                            <Premain-Class>io.helidon.jlink.image.modules.agent.Agent</Premain-Class>
+                            <Premain-Class>io.helidon.jre.modules.agent.Agent</Premain-Class>
                         </manifestEntries>
                     </archive>
                 </configuration>

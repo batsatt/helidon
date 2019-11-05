@@ -36,9 +36,9 @@ init() {
     readonly jandexJar="${jlinkLibs}/jandex.jar"
     readonly jlinkDir="${rootDir}/jlink/target/classes"
     readonly patchesDir="${rootDir}/etc/patches"
-    readonly mainModule="helidon.jlink"
-    readonly modulesMainClass="io.helidon.jlink.image.modules.ModulesLinker"
-    readonly jarsMainClass="io.helidon.jlink.image.jars.JarsLinker"
+    readonly mainModule="helidon.jre"
+    readonly modulesMainClass="io.helidon.jre.modules.ModulesLinker"
+    readonly jarsMainClass="io.helidon.jre.jars.JarsLinker"
 
     [[ ${JAVA_11_HOME} ]] && javaHome=${JAVA_11_HOME} || javaHome=${JAVA_HOME}
 

@@ -13,20 +13,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-module helidon.jre {
-    exports io.helidon.jre.modules.plugins;
-    exports io.helidon.jre.common.logging;
-    exports io.helidon.jre.common.util;
 
-    requires jdk.jlink;
-    requires java.instrument;
-    requires java.logging;
-    requires jandex;
+package io.helidon.jre.common.util;
 
-    /* This doesn't work since 'provides' are processed before the required add-exports:
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 
-        provides jdk.tools.jlink.plugin.Plugin with io.helidon.tool.image.jlink.plugins.HelidonPlugin;
+/**
+ * Stream utilities.
+ */
+public class StreamUtils {
+    private static final byte[] BUFFER = new byte[8196];
 
-       Once jlink plugins are officially supported, the Agent won't be required
-     */
+    public static void transfer(InputStream in, OutputStream out) throws IOException {
+        synchronized (BUFFER) {
+            try (InputStream data = in) {
+                int bytesRead;
+                while ((bytesRead = data.read(BUFFER)) != -1) {
+                    out.write(BUFFER, 0, bytesRead);
+                }
+            }
+        }
+    }
+
+    private StreamUtils() {
+    }
 }
