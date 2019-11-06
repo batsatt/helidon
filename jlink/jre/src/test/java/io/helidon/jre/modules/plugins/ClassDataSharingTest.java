@@ -45,11 +45,12 @@ class ClassDataSharingTest {
     void testQuickstartMp() throws Exception {
         Path mainJar = TestFiles.helidonMpJar();
         Path weldJrtJar = TestFiles.weldJrtJar();
+        Path archiveFile = Files.createTempFile("server","jsa");
         ClassDataSharing cds = ClassDataSharing.builder()
                                                .jre(JAVA_HOME)
                                                .applicationJar(mainJar)
                                                .createArchive(false)
-                                               .showOutput(false)
+                                               .logOutput(false)
                                                .build();
         assertThat(cds, is(not(nullValue())));
         assertThat(cds.classList(), is(not(nullValue())));
@@ -67,8 +68,9 @@ class ClassDataSharingTest {
                               .jre(JAVA_HOME)
                               .applicationJar(mainJar)
                               .classListFile(cds.classListFile())
+                              .archiveFile(archiveFile)
                               .weldJrtJar(weldJrtJar)
-                              .showOutput(false)
+                              .logOutput(false)
                               .build();
 
         assertThat(cds.classListFile(), is(not(nullValue())));

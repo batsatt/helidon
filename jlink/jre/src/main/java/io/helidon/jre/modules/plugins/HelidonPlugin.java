@@ -228,7 +228,7 @@ public class HelidonPlugin implements Plugin {
                                                    .jre(jdk.path())
                                                    .applicationJar(appModulePath)
                                                    .createArchive(false)
-                                                   .showOutput(false)
+                                                   .logOutput(false)
                                                    .build();
             return cds.classListFile();
         } catch (Exception e) {

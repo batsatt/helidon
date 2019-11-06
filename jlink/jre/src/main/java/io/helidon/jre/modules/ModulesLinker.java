@@ -174,8 +174,8 @@ public class ModulesLinker {
                 final ApplicationContext context = ApplicationContext.get();
                 final ClassDataSharing cds = ClassDataSharing.builder()
                                                              .jre(config.jreDirectory())
-                                                             .moduleName(context.applicationModuleName())
-                                                             .showOutput(config.verbose())
+                                                             .applicationModule(context.applicationModuleName())
+                                                             .logOutput(config.verbose())
                                                              .build();
                 LOG.info("Added CDS archive %s", cds.archiveFile());
             } catch (Exception e) {

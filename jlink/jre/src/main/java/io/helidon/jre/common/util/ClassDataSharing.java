@@ -34,51 +34,87 @@ import static io.helidon.jre.common.util.FileUtils.assertFile;
 import static java.util.Objects.requireNonNull;
 
 /**
- * A builder for a CDS archive.
+ * A builder for a CDS archive for a Helidon application either as a jar or a module.
+ * Assumes that it can cause the application to exit once startup has completed by setting the "exit.on.startup" system property.
  */
 public class ClassDataSharing {
     private final Path applicationJar;
-    private final Path javaHome;
+    private final String applicationModule;
+    private final Path jre;
     private final Path classListFile;
     private final Path archiveFile;
     private final List<String> classList;
 
+    /**
+     * Returns a new {@link Builder}.
+     *
+     * @return The builder.
+     */
     public static Builder builder() {
         return new Builder();
     }
 
-    public static ClassDataSharing create(Path javaHome, Path applicationJar) throws Exception {
-        return builder().jre(javaHome)
-                        .applicationJar(applicationJar)
-                        .build();
-    }
-
     private ClassDataSharing(Builder builder) {
-        this.applicationJar = builder.applicationJar;
-        this.javaHome = builder.javaHome;
+        this.applicationJar = builder.mainJar;
+        this.applicationModule = builder.applicationModule;
+        this.jre = builder.jre;
         this.classListFile = builder.classListFile;
         this.archiveFile = builder.archiveFile;
         this.classList = builder.classList;
     }
 
+    /**
+     * Returns the path to the main application jar.
+     *
+     * @return The path. Will be {@code null} if a moduleName was used.
+     */
     public Path applicationJar() {
         return applicationJar;
     }
 
-    public Path javaHome() {
-        return javaHome;
+    /**
+     * Returns the name of the main application module.
+     *
+     * @return The name. Will be {@code null} if a jar was used.
+     */
+    public String applicationModule() {
+        return applicationModule;
     }
 
+    /**
+     * Returns the path to the JRE used to build the archive.
+     *
+     * @return The path.
+     */
+    public Path jre() {
+        return jre;
+    }
+
+    /**
+     * Returns the path to the list of classes collected during application startup.
+     *
+     * @return The path.
+     */
     public Path classListFile() {
         return classListFile;
     }
 
-    public Path archiveFile() {
-        return archiveFile;
-    }
-
+    /**
+     * Returns the classes collected during application startup.
+     *
+     * @return
+     */
     public List<String> classList() {
         return classList;
+    }
+
+    /**
+     * Returns the path to the archive.
+     *
+     * @return The path.
+     */
+    public Path archiveFile() {
+        return archiveFile;
     }
 
     public static class Builder {
@@ -86,8 +122,6 @@ public class ClassDataSharing {
         private static final String FILE_PREFIX = "server";
         private static final String CLASS_LIST_FILE_SUFFIX = ".classlist";
         private static final String JAR_SUFFIX = ".jar";
-        private static final String FILE_SEP = File.separator;
-        private static final String JAVA_CMD_PATH = "bin" + FILE_SEP + "java";
         private static final String XSHARE_OFF = "-Xshare:off";
         private static final String XSHARE_DUMP = "-Xshare:dump";
         private static final String XX_DUMP_LOADED_CLASS_LIST = "-XX:DumpLoadedClassList=";
@@ -99,10 +133,10 @@ public class ClassDataSharing {
         private static final String CLASS_SUFFIX = ".class";
         private static final String MODULE_INFO_NAME = "module-info";
         private static final String BEAN_ARCHIVE_SCANNER = "org/jboss/weld/environment/deployment/discovery/BeanArchiveScanner";
-        private Path javaHome;
+        private Path jre;
         private String archiveDir;
-        private String moduleName;
-        private Path applicationJar;
+        private String applicationModule;
+        private Path mainJar;
         private Path classListFile;
         private Path archiveFile;
         private List<String> classList;
@@ -119,66 +153,122 @@ public class ClassDataSharing {
             this.archiveDir = LIB_DIR_NAME;
         }
 
-        public Builder jre(Path javaHome) {
-            this.javaHome = javaHome;
+        /**
+         * Sets the path to the JRE to use when building the archive.
+         *
+         * @param jre The path.
+         * @return The builder.
+         */
+        public Builder jre(Path jre) {
+            this.jre = jre;
             javaPath(); // Validate
             return this;
         }
 
-        public Builder applicationJar(Path applicationJar) {
-            if (requireNonNull(applicationJar).isAbsolute()) {
-                this.applicationJar = assertJar(applicationJar);
+        /**
+         * Sets the path to the main application jar.
+         *
+         * @param mainJar The path to the main application jar.
+         * @return The builder.
+         */
+        public Builder applicationJar(Path mainJar) {
+            if (requireNonNull(mainJar).isAbsolute()) {
+                this.mainJar = assertJar(mainJar);
             } else {
-
-                this.applicationJar = assertJar(javaHome.resolve(applicationJar));
+                this.mainJar = assertJar(jre.resolve(mainJar));
             }
             return this;
         }
 
-        public Builder moduleName(String moduleName) {
-            this.moduleName = requireNonNull(moduleName);
+        /**
+         * Sets the name of the main application module.
+         *
+         * @param mainModuleName The the name of the main application module.
+         * @return The builder.
+         */
+        public Builder applicationModule(String mainModuleName) {
+            this.applicationModule = requireNonNull(mainModuleName);
             return this;
         }
 
+        /**
+         * Sets the path of the CDS archive file to create.
+         *
+         * @param archiveFile The path.
+         * @return The builder.
+         */
         public Builder archiveFile(Path archiveFile) {
             this.archiveFile = requireNonNull(archiveFile);
             return this;
         }
 
-        public Builder weldJrtJar(Path weldJrtJar) {
-            this.weldJrtJar = weldJrtJar == null ? null : assertJar(weldJrtJar);
-            return this;
-        }
-
-        public Builder showOutput(boolean showOutput) {
-            this.outputLog = showOutput ? LOG : null;
-            return this;
-        }
-
-        public Builder classListFile(Path classListFile) {
-            this.classListFile = assertFile(classListFile);
-            return this;
-        }
-
+        /**
+         * Sets whether or not to create the CDS archive. Defaults to {@code true}.
+         *
+         * @param createArchive {@code true} if the archive should be created.
+         * @return The builder.
+         */
         public Builder createArchive(boolean createArchive) {
             this.createArchive = createArchive;
             return this;
         }
 
+        /**
+         * Sets the path to the {@code helidon-weld-jrt.jar} file. For MP apps, this will
+         * insert the class names from this jar into the class list so that they will be
+         * included in the CDS archive.
+         *
+         * @param weldJrtJar The path.
+         * @return The builder.
+         */
+        public Builder weldJrtJar(Path weldJrtJar) {
+            this.weldJrtJar = weldJrtJar == null ? null : assertJar(weldJrtJar);
+            return this;
+        }
+
+        /**
+         * Sets whether or not to output from the build process(es) should be logged.
+         * Defaults to {@code false} and will include the output in any exception message.
+         *
+         * @param logOutput {@code true} if output should be logged.
+         * @return The builder.
+         */
+        public Builder logOutput(boolean logOutput) {
+            this.outputLog = logOutput ? LOG : null;
+            return this;
+        }
+
+        /**
+         * Sets the path of the class list file to use. One is generated if not provided.
+         *
+         * @param classListFile The path.
+         * @return The builder.
+         */
+        public Builder classListFile(Path classListFile) {
+            this.classListFile = assertFile(classListFile);
+            return this;
+        }
+
+        /**
+         * Build the instance.
+         *
+         * @return The instance.
+         * @throws Exception If an error occurs.
+         */
         public ClassDataSharing build() throws Exception {
-            requireNonNull(javaHome, "java home required");
-            if (applicationJar == null && moduleName == null) {
+            requireNonNull(jre, "java home required");
+            if (mainJar == null && applicationModule == null) {
                 throw new IllegalStateException("Either application jar or module name required");
-            } else if (applicationJar != null && moduleName != null) {
+            } else if (mainJar != null && applicationModule != null) {
                 throw new IllegalStateException("Cannot specify both application jar and module name");
-            } else if (applicationJar != null) {
+            } else if (mainJar != null) {
                 this.targetOption = "-jar";
-                this.target = applicationJar.toString();
+                this.target = mainJar.toString();
                 this.targetDescription = target;
             } else {
                 this.targetOption = "-m";
-                this.target = moduleName;
-                this.targetDescription = "module " + target + " in " + javaHome;
+                this.target = applicationModule;
+                this.targetDescription = "module " + target + " in " + jre;
             }
 
             if (classListFile == null) {
@@ -192,7 +282,7 @@ public class ClassDataSharing {
 
             if (createArchive) {
                 if (archiveFile == null) {
-                    archiveFile = assertDir(javaHome.resolve(archiveDir)).resolve(ARCHIVE_NAME);
+                    archiveFile = assertDir(jre.resolve(archiveDir)).resolve(ARCHIVE_NAME);
                 }
                 buildCdsArchive();
             }
@@ -248,13 +338,13 @@ public class ClassDataSharing {
             command.add(target);
             builder.command(command);
 
-            builder.directory(javaHome.toFile());
+            builder.directory(jre.toFile());
 
             ProcessMonitor.newMonitor(builder, action, outputLog).run();
         }
 
         private Path javaPath() {
-            return JavaRuntime.javaCommand(javaHome);
+            return JavaRuntime.javaCommand(jre);
         }
 
         private static Path tempFile(String suffix) throws IOException {

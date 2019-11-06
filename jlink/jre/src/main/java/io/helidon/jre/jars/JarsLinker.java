@@ -154,7 +154,7 @@ public class JarsLinker {
                 ClassDataSharing.builder()
                                 .jre(jre.path())
                                 .applicationJar(jreMainJar)
-                                .showOutput(config.verbose())
+                                .logOutput(config.verbose())
                                 .build();
             } catch (Exception e) {
                 throw new RuntimeException(e);
