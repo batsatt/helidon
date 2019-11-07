@@ -82,31 +82,57 @@ public class JavaRuntime {
         return jreDirectory;
     }
 
-    public static Path javaCommand(Path jreDir) {
-        return assertFile(assertDir(jreDir).resolve(JAVA_CMD_PATH));
-    }
-
-    public static Path assertJre(Path jreDir) {
-        if (!Files.isDirectory(requireNonNull(jreDir))) {
-            throw new IllegalArgumentException("Directory not found: " + jreDir);
-        }
-        final Path javaCommand = jreDir.resolve(JAVA_CMD_PATH);
+    /**
+     * Asserts that the given directory points to a valid Java Runtime.
+     *
+     * @param jreDirectory The directory.
+     * @return The normalized, absolute directory path.
+     * @throws IllegalArgumentException If the directory is not a valid JRE.
+     */
+    public static Path assertJre(Path jreDirectory) {
+        final Path result = FileUtils.assertDir(jreDirectory);
+        final Path javaCommand = jreDirectory.resolve(JAVA_CMD_PATH);
         if (!Files.isRegularFile(javaCommand)) {
-            throw new IllegalArgumentException("Not a valid JRE (" + javaCommand + " not found): " + jreDir);
+            throw new IllegalArgumentException("Not a valid JRE (" + javaCommand + " not found): " + jreDirectory);
         }
-        return jreDir;
+        return result;
     }
 
-    public static Path assertJdk(Path jdkDir) {
-        final Path jmodsDir = assertJre(jdkDir).resolve(JMODS_DIR);
+    /**
+     * Asserts that the given directory points to a valid Java Runtime containing {@code jmod} files.
+     *
+     * @param jdkDirectory The directory.
+     * @return The normalized, absolute directory path.
+     * @throws IllegalArgumentException If the directory is not a valid JDK.
+     */
+    public static Path assertJdk(Path jdkDirectory) {
+        final Path result = assertJre(jdkDirectory);
+        final Path jmodsDir = result.resolve(JMODS_DIR);
         final Path javaBase = jmodsDir.resolve(JAVA_BASE_JMOD);
         if (!Files.isDirectory(jmodsDir) || !Files.exists(javaBase)) {
-            throw new IllegalArgumentException("Not a valid JDK (" + JAVA_BASE_JMOD + " not found): " + jdkDir);
+            throw new IllegalArgumentException("Not a valid JDK (" + JAVA_BASE_JMOD + " not found): " + jdkDirectory);
         }
-        javaCommand(jdkDir);
-        return jdkDir;
+        return jdkDirectory;
     }
 
+    /**
+     * Returns the path to the {@code java} executable in the given JRE directory.
+     *
+     * @param jreDirectory The directory.
+     * @return The normalized, absolute directory path.
+     * @throws IllegalArgumentException If the directory is not a valid JDK.
+     */
+    public static Path javaCommand(Path jreDirectory) {
+        return assertFile(assertDir(jreDirectory).resolve(JAVA_CMD_PATH));
+    }
+
+    /**
+     * Returns a new {@code JavaRuntime} for this JVM.
+     *
+     * @param assertJdk {@code} true if the result must be a valid JDK.
+     * @return The new instance.
+     * @throws IllegalArgumentException If this JVM is not a valid JDK.
+     */
     public static JavaRuntime current(boolean assertJdk) {
         final Path jreDir = CURRENT_JAVA_HOME_DIR;
         if (assertJdk) {
@@ -115,16 +141,41 @@ public class JavaRuntime {
         return new JavaRuntime(jreDir, null);
     }
 
-    public static JavaRuntime jdk(Path jdkDir) {
-        return new JavaRuntime(assertJdk(jdkDir), null);
+    /**
+     * Returns a new {@code JavaRuntime} for the given directory, asserting that it is a valid JDK.
+     *
+     * @param jdkDirectory The directory.
+     * @return The new instance.
+     * @throws IllegalArgumentException If this JVM is not a valid JDK.
+     */
+    public static JavaRuntime jdk(Path jdkDirectory) {
+        return new JavaRuntime(assertJdk(jdkDirectory), null);
     }
 
-    public static JavaRuntime jdk(Path jdkDir, Runtime.Version version) {
-        return new JavaRuntime(assertJdk(jdkDir), version);
+    /**
+     * Returns a new {@code JavaRuntime} for the given directory, asserting that it is a valid JDK.
+     *
+     * @param jdkDirectory The directory.
+     * @param version The runtime version of the given JDK. Computed if {@code null}.
+     * @return The new instance.
+     * @throws IllegalArgumentException If this JVM is not a valid JDK.
+     */
+    public static JavaRuntime jdk(Path jdkDirectory, Runtime.Version version) {
+        return new JavaRuntime(assertJdk(jdkDirectory), version);
     }
 
-    public static JavaRuntime jre(Path jreDir, Runtime.Version version) {
-        return new JavaRuntime(jreDir, requireNonNull(version));
+
+    /**
+     * Returns a new {@code JavaRuntime} for the given directory.
+     *
+     * @param jreDirectory The directory.
+     * @param version The runtime version of the given JRE. If {@code null}, the version is computed if {@code jmod}
+     * files are present otherwise an exception is thrown.
+     * @return The new instance.
+     * @throws IllegalArgumentException If this JVM is not a valid JRE or the runtime version cannot be computed.
+     */
+    public static JavaRuntime jre(Path jreDirectory, Runtime.Version version) {
+        return new JavaRuntime(jreDirectory, requireNonNull(version));
     }
 
     private JavaRuntime(Path javaHome, Runtime.Version version) {
@@ -144,37 +195,62 @@ public class JavaRuntime {
         }
     }
 
+    /**
+     * Return the version.
+     *
+     * @return The version.
+     */
     public Runtime.Version version() {
         return version;
     }
 
+    /**
+     * Returns the feature version.
+     *
+     * @return The feature version.
+     */
     public String featureVersion() {
         return Integer.toString(version.feature());
     }
 
+    /**
+     * Returns the path from which this instance was built.
+     *
+     * @return The path.
+     */
     public Path path() {
         return javaHome;
     }
 
+    /**
+     * Returns whether or not this instance represents the current JVM.
+     *
+     * @return {@code true} if this instance is the current JVM.
+     */
     public boolean isCurrent() {
         return javaHome.equals(CURRENT_JAVA_HOME_DIR);
     }
 
-    private void assertHasJavaBaseJmod() {
-        final Path javaBase = jmodsDir.resolve(JAVA_BASE_JMOD);
-        if (!Files.isDirectory(jmodsDir) || !Files.exists(javaBase)) {
-            throw new IllegalArgumentException("Not a valid JDK (" + JAVA_BASE_JMOD + " not found): " + javaHome);
-        }
-    }
-
+    /**
+     * Returns the module names.
+     *
+     * @return The module names. Empty if this instance does not contain {@code .jmod} files.
+     */
     public Set<String> moduleNames() {
         return modules.keySet();
     }
 
+    /**
+     * Returns the path to the {@code .jmod} file for the given name.
+     *
+     * @param moduleName The module name.
+     * @return The path the the {@code .jmod} file.
+     * @throws IllegalArgumentException If the file cannot be found.
+     */
     public Path jmodFile(String moduleName) {
         final Path result = modules.get(moduleName);
         if (result == null) {
-            throw new IllegalStateException("Cannot find .jmod file for module '" + moduleName + "' in " + path());
+            throw new IllegalArgumentException("Cannot find .jmod file for module '" + moduleName + "' in " + path());
         }
         return result;
     }
@@ -184,7 +260,7 @@ public class JavaRuntime {
      *
      * @param directory The directory. May be relative or absolute.
      * @return The directory.
-     * @throws IllegalArgumentException If the directory is absolute but is not within this Java Home directory.
+     * @throws IllegalArgumentException If the directory is absolute but is not within this {@link #path()}.
      */
     public Path ensureDirectory(Path directory) {
         Path relativeDir = requireNonNull(directory);
@@ -210,6 +286,13 @@ public class JavaRuntime {
                                                    .toString());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        }
+    }
+
+    private void assertHasJavaBaseJmod() {
+        final Path javaBase = jmodsDir.resolve(JAVA_BASE_JMOD);
+        if (!Files.isDirectory(jmodsDir) || !Files.exists(javaBase)) {
+            throw new IllegalArgumentException("Not a valid JDK (" + JAVA_BASE_JMOD + " not found): " + javaHome);
         }
     }
 

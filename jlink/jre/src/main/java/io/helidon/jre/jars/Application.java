@@ -71,11 +71,11 @@ public class Application {
     public Path install(JavaRuntime jre) {
         final Path appRootDir = mainJar.path().getParent();
         final Path appInstallDir = jre.ensureDirectory(APP_DIR);
-        final Path installedAppJar = mainJar.copyToDirectory(appInstallDir, isMicroprofile);
+        final Path installedAppJar = mainJar.copyToDirectory(appInstallDir, isMicroprofile());
         classPath.forEach(jar -> {
             final Path relativeDir = appRootDir.relativize(jar.path().getParent());
             final Path installDir = jre.ensureDirectory(appInstallDir.resolve(relativeDir));
-            jar.copyToDirectory(installDir, isMicroprofile);
+            jar.copyToDirectory(installDir, isMicroprofile());
         });
         return installedAppJar;
     }

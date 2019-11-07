@@ -26,6 +26,13 @@ import java.io.OutputStream;
 public class StreamUtils {
     private static final byte[] BUFFER = new byte[8196];
 
+    /**
+     * Transfers the contents of the given input stream to the given output stream.
+     *
+     * @param in The input stream.
+     * @param out The output streap.
+     * @throws IOException If an error occurs.
+     */
     public static void transfer(InputStream in, OutputStream out) throws IOException {
         synchronized (BUFFER) {
             try (InputStream data = in) {

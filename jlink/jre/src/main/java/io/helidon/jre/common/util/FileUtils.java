@@ -33,9 +33,23 @@ import static java.util.Objects.requireNonNull;
  * File utilities.
  */
 public class FileUtils {
+    /**
+     * The Java Home directory for the running JVM.
+     */
     public static final Path CURRENT_JAVA_HOME_DIR = Paths.get(System.getProperty("java.home"));
+
+    /**
+     * The current directory.
+     */
     public static final Path CURRENT_DIR = Paths.get(".").toAbsolutePath();
 
+    /**
+     * Ensure that the given path is an existing directory, creating it if required.
+     *
+     * @param path The path.
+     * @param attrs The attributes.
+     * @return The normalized, absolute directory path.
+     */
     public static Path ensureDirectory(Path path, FileAttribute<?>... attrs) {
         if (Files.exists(requireNonNull(path))) {
             return assertDir(path);
@@ -51,13 +65,13 @@ public class FileUtils {
     /**
      * List all files in the given directory that match the given filter. Does not recurse.
      *
-     * @param dir The directory.
+     * @param directory The directory.
      * @param fileNameFilter The filter.
-     * @return The files.
+     * @return The normalized, absolute file paths.
      */
-    public static List<Path> listFiles(Path dir, Predicate<String> fileNameFilter) {
+    public static List<Path> listFiles(Path directory, Predicate<String> fileNameFilter) {
         try {
-            return Files.find(assertDir(dir), 1, (path, attrs) ->
+            return Files.find(assertDir(directory), 1, (path, attrs) ->
                 attrs.isRegularFile() && fileNameFilter.test(path.getFileName().toString())
             ).collect(Collectors.toList());
         } catch (IOException e) {
@@ -68,46 +82,57 @@ public class FileUtils {
     /**
      * List all files and directories in the given directory. Does not recurse.
      *
-     * @param dir The directory.
-     * @return The files.
+     * @param directory The directory.
+     * @return The normalized, absolute file paths.
      */
-    public static List<Path> list(Path dir) {
+    public static List<Path> list(Path directory) {
         try {
-            return Files.find(assertDir(dir), 1, (path, attrs) -> true)
+            return Files.find(assertDir(directory), 1, (path, attrs) -> true)
                         .collect(Collectors.toList());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
     }
 
-    public static Path assertNonEmptyDir(Path dir) {
-        Path result = assertDir(dir);
-        try {
-            if (Files.list(dir).noneMatch(Files::isRegularFile)) {
-                throw new IllegalArgumentException("no files found in directory " + result);
-            }
+    /**
+     * Assert that the given path exists and is a directory.
+     *
+     * @param directory The directory.
+     * @return The normalized, absolute directory path.
+     * @throws IllegalArgumentException If the path does not exist or is not a directory.
+     */
+    public static Path assertDir(Path directory) {
+        final Path result = assertExists(directory);
+        if (Files.isDirectory(result)) {
             return result;
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    public static Path assertDir(Path dir) {
-        if (Files.isDirectory(requireNonNull(dir))) {
-            return dir.toAbsolutePath().normalize();
         } else {
-            throw new IllegalArgumentException(dir + " is not a directory");
+            throw new IllegalArgumentException(directory + " is not a directory");
         }
     }
 
+    /**
+     * Assert that the given path exists and is a file.
+     *
+     * @param file The file.
+     * @return The normalized, absolute file path.
+     * @throws IllegalArgumentException If the path does not exist or is not a file.
+     */
     public static Path assertFile(Path file) {
-        if (Files.isRegularFile(requireNonNull(file))) {
-            return file.toAbsolutePath().normalize();
+        final Path result = assertExists(file);
+        if (Files.isRegularFile(result)) {
+            return result;
         } else {
             throw new IllegalArgumentException(file + " is not a file");
         }
     }
 
+    /**
+     * Assert that the given path exists.
+     *
+     * @param path The path.
+     * @return The normalized, absolute path.
+     * @throws IllegalArgumentException If the path does not exist.
+     */
     public static Path assertExists(Path path) {
         if (Files.exists(requireNonNull(path))) {
             return path.toAbsolutePath().normalize();

@@ -82,16 +82,29 @@ public class Jar {
     private Index index;
     private boolean builtIndex;
 
+    /**
+     * An entry in a jar file.
+     */
     public class Entry extends JarEntry {
 
         private Entry(JarEntry entry) {
             super(entry);
         }
 
+        /**
+         * Returns entry path.
+         *
+         * @return The path.
+         */
         public String path() {
             return getName();
         }
 
+        /**
+         * Returns a stream to access the data for this entry.
+         *
+         * @return The stream.
+         */
         public InputStream data() {
             try {
                 return jar.getInputStream(this);
@@ -152,10 +165,20 @@ public class Jar {
         }
     }
 
+    /**
+     * Returns the file name of this jar.
+     *
+     * @return The name.
+     */
     public String name() {
         return path.getFileName().toString();
     }
 
+    /**
+     * Returns the path to this jar.
+     *
+     * @return The path.
+     */
     public Path path() {
         return path;
     }
@@ -179,39 +202,82 @@ public class Jar {
         return emptyList();
     }
 
+    /**
+     * Retuns the entries in this jar.
+     *
+     * @return The entries.
+     */
     public Stream<Entry> entries() {
         final Iterator<JarEntry> iterator = jar.entries().asIterator();
         return StreamSupport.stream(Spliterators.spliteratorUnknownSize(iterator, Spliterator.ORDERED), false)
                             .map(Entry::new);
     }
 
+    /**
+     * Returns whether or not this jar is signed.
+     *
+     * @return {@code true} if signed.
+     */
     public boolean isSigned() {
         return isSigned;
     }
 
+    /**
+     * Returns whether or not this jar is multi-release.
+     *
+     * @return {@code true} if multi-release.
+     */
     public boolean isMultiRelease() {
         return isMultiRelease;
     }
 
+    /**
+     * Returns whether or not this jar is a CDI beans archive.
+     *
+     * @return {@code true} if a beans archive.
+     */
     public boolean isBeansArchive() {
         return isBeansArchive;
     }
 
+    /**
+     * Returns whether or not this jar is a CDI beans archive containing a Jandex index.
+     *
+     * @return {@code true} if a beans archive containing an index.
+     */
     public boolean hasIndex() {
         return isBeansArchive && index != null;
     }
 
+    /**
+     * Returns whether or not this jar contains a {@code module-info.class).
+     *
+     * @return {@code true} if a {@code module-info.class) is present.
+     */
     public boolean hasModuleDescriptor() {
         return descriptor != null;
     }
 
+    /**
+     * Returns the descriptor if a {@code module-info.class) is present.
+     *
+     * @return The descriptor or {@code null} if not present.
+     */
     public ModuleDescriptor moduleDescriptor() {
         return descriptor;
     }
 
-    public Path copyToDirectory(Path dir, boolean ensureIndex) {
+    /**
+     * Copy this jar into the given directory. Adds a Jandex index if required.
+     *
+     * @param targetDir The targetDirectory.
+     * @param ensureIndex {@code true} if an index should be added if this is a beans archive
+     * and their is no Jandex index present.
+     * @return The normalized, absolute path to the new file.
+     */
+    public Path copyToDirectory(Path targetDir, boolean ensureIndex) {
         final Path fileName = path.getFileName();
-        final Path targetFile = assertDir(dir).resolve(fileName);
+        final Path targetFile = assertDir(targetDir).resolve(fileName);
         if (ensureIndex) {
             ensureIndex();
         }

@@ -23,7 +23,7 @@
                 <artifactId>maven-jar-plugin</artifactId>
                 <version>${version.plugin.jar}</version>
                 <configuration>
-                    <finalName>${artifactId}</finalName>
+                    <finalName>${project.artifactId}</finalName>
                     <archive>
                         <manifestEntries>
                             <Premain-Class>io.helidon.jre.modules.agent.Agent</Premain-Class>
