@@ -16,7 +16,12 @@
 
 package io.helidon.jre.jars;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -26,6 +31,7 @@ import java.util.spi.ToolProvider;
 import io.helidon.jre.common.logging.Log;
 import io.helidon.jre.common.util.ClassDataSharing;
 import io.helidon.jre.common.util.JavaRuntime;
+import io.helidon.jre.common.util.StreamUtils;
 
 /**
  * Create a custom JRE by finding the Java modules required of a Helidon application and linking
@@ -35,6 +41,9 @@ public class JarsLinker {
     private static final Log LOG = Log.getLog("jars-linker");
     private static final String JLINK_TOOL_NAME = "jlink";
     private static final String JLINK_DEBUG_PROPERTY = JLINK_TOOL_NAME + ".debug";
+    private static final String SCRIPT_TEMPLATE_PATH = "server-template.sh";
+    private static final String SCRIPT_MAIN_JAR_NAME = "<MAIN_JAR_NAME>";
+    private static final String SCRIPT_PATH = "bin/server";
     private final ToolProvider jlink;
     private final List<String> jlinkArgs;
     private Configuration config;
@@ -90,6 +99,7 @@ public class JarsLinker {
         buildJre();
         copyJars();
         buildCdsArchive();
+        addServerScript();
         complete(startTime);
         return config.jreDirectory();
     }
@@ -159,6 +169,27 @@ public class JarsLinker {
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
+        }
+    }
+
+    private void addServerScript() {
+        try {
+            final String mainJarName = jreMainJar.getFileName().toString();
+            final String template = StreamUtils.toString(getClass().getClassLoader().getResourceAsStream(SCRIPT_TEMPLATE_PATH));
+            final String script = template.replace(SCRIPT_MAIN_JAR_NAME, mainJarName);
+            final Path scriptFile = jre.path().resolve(SCRIPT_PATH);
+            Files.copy(new ByteArrayInputStream(script.getBytes()), scriptFile);
+            Files.setPosixFilePermissions(scriptFile, Set.of(
+                PosixFilePermission.OWNER_READ,
+                PosixFilePermission.OWNER_WRITE,
+                PosixFilePermission.OWNER_EXECUTE,
+                PosixFilePermission.GROUP_READ,
+                PosixFilePermission.GROUP_EXECUTE,
+                PosixFilePermission.OTHERS_READ,
+                PosixFilePermission.OTHERS_EXECUTE
+            ));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 

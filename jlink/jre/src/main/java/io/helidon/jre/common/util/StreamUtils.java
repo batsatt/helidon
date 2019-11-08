@@ -16,9 +16,11 @@
 
 package io.helidon.jre.common.util;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Stream utilities.
@@ -30,7 +32,7 @@ public class StreamUtils {
      * Transfers the contents of the given input stream to the given output stream.
      *
      * @param in The input stream.
-     * @param out The output streap.
+     * @param out The output stream.
      * @throws IOException If an error occurs.
      */
     public static void transfer(InputStream in, OutputStream out) throws IOException {
@@ -42,6 +44,19 @@ public class StreamUtils {
                 }
             }
         }
+    }
+
+    /**
+     * Reads the contents of the given input stream as a UTF8 string.
+     *
+     * @param in The input stream.
+     * @return The string.
+     * @throws IOException If an error occurs.
+     */
+    public static String toString(InputStream in) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        transfer(in, out);
+        return new String(out.toByteArray(), StandardCharsets.UTF_8);
     }
 
     private StreamUtils() {

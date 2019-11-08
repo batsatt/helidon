@@ -16,8 +16,11 @@
 
 package io.helidon.jre.jars;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
+import java.util.Set;
 
 import io.helidon.jre.TestFiles;
 import io.helidon.jre.common.util.FileUtils;
@@ -45,12 +48,9 @@ class JarsLinkerTest {
         Path jre = JarsLinker.linker(config).link();
 
         FileUtils.assertDir(jre);
-        Path appDir = FileUtils.assertDir(jre.resolve("app"));
-        Path appLibDir = FileUtils.assertDir(appDir.resolve("libs"));
-
-        Path libDir = FileUtils.assertDir(jre.resolve("lib"));
-        Path archiveFile = libDir.resolve("server.jsa");
-        assertThat(Files.exists(archiveFile), is(false));
+        assertApplication(jre, mainJar.getFileName().toString());
+        assertCdsArchive(jre, false);
+        assertScript(jre);
     }
 
     @Test
@@ -67,11 +67,9 @@ class JarsLinkerTest {
         Path jre = JarsLinker.linker(config).link();
 
         FileUtils.assertDir(jre);
-        Path appDir = FileUtils.assertDir(jre.resolve("app"));
-        Path appLibDir = FileUtils.assertDir(appDir.resolve("libs"));
-
-        Path libDir = FileUtils.assertDir(jre.resolve("lib"));
-        Path archiveFile = FileUtils.assertFile(libDir.resolve("server.jsa"));
+        assertApplication(jre, mainJar.getFileName().toString());
+        assertCdsArchive(jre, true);
+        assertScript(jre);
     }
 
     @Test
@@ -87,10 +85,50 @@ class JarsLinkerTest {
         Path jre = JarsLinker.linker(config).link();
 
         FileUtils.assertDir(jre);
-        Path appDir = FileUtils.assertDir(jre.resolve("app"));
-        Path appLibDir = FileUtils.assertDir(appDir.resolve("libs"));
+        assertApplication(jre, mainJar.getFileName().toString());
+        assertCdsArchive(jre, true);
+        assertScript(jre);
+    }
 
+    private static void assertApplication(Path jre, String mainJarName) throws IOException {
+        FileUtils.assertDir(jre);
+        Path appDir = FileUtils.assertDir(jre.resolve("app"));
+        Path mainAppJar = FileUtils.assertFile(appDir.resolve(mainJarName));
+        assertReadOnly(mainAppJar);
+        Path appLibDir = FileUtils.assertDir(appDir.resolve("libs"));
+        for (Path file : FileUtils.listFiles(appLibDir, name -> true)) {
+            assertReadOnly(file);
+        }
+    }
+
+    private static void assertScript(Path jre) throws IOException {
+        Path binDir = FileUtils.assertDir(jre.resolve("bin"));
+        Path scriptFile = FileUtils.assertFile(binDir.resolve("server"));
+        assertExecutable(scriptFile);
+    }
+
+    private static void assertCdsArchive(Path jre, boolean archiveExists) {
         Path libDir = FileUtils.assertDir(jre.resolve("lib"));
-        Path archiveFile = FileUtils.assertFile(libDir.resolve("server.jsa"));
+        Path archiveFile = libDir.resolve("server.jsa");
+        assertThat(Files.exists(archiveFile), is(archiveExists));
+    }
+
+    private static void assertReadOnly(Path file) throws IOException {
+        Set<PosixFilePermission> perms = Files.getPosixFilePermissions(file);
+        assertThat(file.toString(), perms, is(Set.of(PosixFilePermission.OWNER_READ,
+                                                     PosixFilePermission.OWNER_WRITE,
+                                                     PosixFilePermission.GROUP_READ,
+                                                     PosixFilePermission.OTHERS_READ)));
+    }
+
+    private static void assertExecutable(Path file) throws IOException {
+        Set<PosixFilePermission> perms = Files.getPosixFilePermissions(file);
+        assertThat(file.toString(), perms, is(Set.of(PosixFilePermission.OWNER_READ,
+                                                     PosixFilePermission.OWNER_EXECUTE,
+                                                     PosixFilePermission.OWNER_WRITE,
+                                                     PosixFilePermission.GROUP_READ,
+                                                     PosixFilePermission.GROUP_EXECUTE,
+                                                     PosixFilePermission.OTHERS_READ,
+                                                     PosixFilePermission.OTHERS_EXECUTE)));
     }
 }

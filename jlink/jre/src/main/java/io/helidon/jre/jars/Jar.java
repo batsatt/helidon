@@ -27,6 +27,7 @@ import java.lang.module.ModuleDescriptor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
@@ -292,6 +293,16 @@ public class Jar {
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        }
+        try {
+            Files.setPosixFilePermissions(targetFile, Set.of(
+                PosixFilePermission.OWNER_READ,
+                PosixFilePermission.OWNER_WRITE,
+                PosixFilePermission.GROUP_READ,
+                PosixFilePermission.OTHERS_READ
+            ));
+        } catch (IOException e) {
+            LOG.warn("Unable to set %s read-only: %s", e.getMessage());
         }
         return targetFile;
     }
