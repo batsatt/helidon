@@ -20,12 +20,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Level;
 import java.util.spi.ToolProvider;
 
-import io.helidon.jre.common.logging.Log;
-import io.helidon.jre.common.util.ClassDataSharing;
-import io.helidon.jre.common.util.FileUtils;
+import io.helidon.jre.common.ClassDataSharing;
+import io.helidon.jre.common.FileUtils;
+import io.helidon.jre.common.Log;
 import io.helidon.jre.modules.plugins.ApplicationContext;
 import io.helidon.jre.modules.plugins.BootOrderPlugin;
 import io.helidon.jre.modules.plugins.HelidonPlugin;
@@ -62,7 +61,6 @@ public class ModulesLinker {
         return new ModulesLinker(config);
     }
 
-    private static final Log LOG = Log.getLog("linker");
     private static final String WELD_JRT_JAR_PATH = "libs/helidon-weld-jrt.jar";
     private static final String JLINK_DEBUG_PROPERTY = "jlink.debug";
     private final Configuration config;
@@ -76,7 +74,6 @@ public class ModulesLinker {
         this.helidonPluginArgs = new StringBuilder();
         this.jlink = ToolProvider.findFirst("jlink").orElseThrow();
         if (config.verbose()) {
-            Log.setAllLevels(Level.FINEST);
             System.setProperty(JLINK_DEBUG_PROPERTY, "true");
         }
     }
@@ -165,7 +162,7 @@ public class ModulesLinker {
         if (result != 0) {
             throw new Error("Helidon JRE creation failed.");
         }
-        LOG.info("Helidon JRE created: %s", config.jreDirectory());
+        Log.info("Helidon JRE created: %s", config.jreDirectory());
     }
 
     private void buildCdsArchive() {
@@ -177,7 +174,7 @@ public class ModulesLinker {
                                                              .applicationModule(context.applicationModuleName())
                                                              .logOutput(config.verbose())
                                                              .build();
-                LOG.info("Added CDS archive %s", cds.archiveFile());
+                Log.info("Added CDS archive %s", cds.archiveFile());
             } catch (Exception e) {
                 throw new PluginException(e);
             }
@@ -187,7 +184,7 @@ public class ModulesLinker {
     private ModulesLinker complete(long startTime) {
         final long elapsed = System.currentTimeMillis() - startTime;
         final float startSeconds = elapsed / 1000F;
-        LOG.info("Helidon JRE completed in %.1f seconds: %s", startSeconds, config.jreDirectory());
+        Log.info("Helidon JRE completed in %.1f seconds: %s", startSeconds, config.jreDirectory());
         return this;
     }
 

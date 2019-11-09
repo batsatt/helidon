@@ -4,7 +4,7 @@ usage() {
     echo
     echo "Start ${mainJarName} from this runtime image."
     echo
-    echo "Usage: ${scriptName} <options> [serverArg]..."
+    echo "Usage: ${scriptName} <options> [mainArg]..."
     echo
     echo "Options:"
     echo "     -j | --jvm <option>     Add a JVM option. Can be used multiple times, and/or quoted strings provided."
@@ -20,7 +20,7 @@ main() {
 }
 
 start() {
-    ${javaCommand} ${jvmOptions} -jar ${mainJar} ${serverArgs}
+    exec ${command}
 }
 
 init() {
@@ -32,17 +32,20 @@ init() {
     readonly cdsArchive="${homeDir}/lib/start.jsa"
     readonly mainJar="${homeDir}/app/${mainJarName}"
     jvmOptions=
-    serverArgs=
+    mainArgs=
 
     while (( ${#} > 0 )); do
         case "${1}" in
             -h | --help) usage ;;
             -c | --cds) setCds ;;
+            -d | --debug) setDebug ;;
             -j | --jvm) shift; appendVar jvmOptions "${1}" ;;
-            *) appendVar serverArgs "${1}" ;;
+            *) appendVar mainArgs "${1}" ;;
         esac
         shift
     done
+
+    readonly command="${javaCommand} ${jvmOptions} -jar ${mainJar} ${mainArgs}"
 }
 
 setCds() {
@@ -57,7 +60,7 @@ setDebug() {
     if [[ ${JAVA_DEBUG} ]]; then
         appendVar jvmOptions "${JAVA_DEBUG}"
     else
-        appendVar jvmOptions "-Xdebug -Xnoagent -Djava.compiler=none -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=5005"
+        appendVar jvmOptions "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005"
     fi
 }
 

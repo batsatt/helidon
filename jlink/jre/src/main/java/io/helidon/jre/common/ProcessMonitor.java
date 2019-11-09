@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.helidon.jre.common.util;
+package io.helidon.jre.common;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -27,8 +27,6 @@ import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
 
-import io.helidon.jre.common.logging.Log;
-
 import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
 
@@ -36,7 +34,6 @@ import static java.util.Objects.requireNonNull;
  * Executes a process and waits for completion, monitoring the output.
  */
 public class ProcessMonitor {
-    private static final Log LOG = Log.getLog("processes");
     private static final String EOL = System.getProperty("line.separator");
     private static final ExecutorService EXECUTOR = ForkJoinPool.commonPool();
     private final ProcessBuilder builder;
@@ -48,20 +45,20 @@ public class ProcessMonitor {
     private final Consumer<String> stdErr;
 
     /**
-     * Returns a new monitor for the given {@link ProcessBuilder}. If {@code log} is {@code null}, output is captured
+     * Returns a new monitor for the given {@link ProcessBuilder}. If {@code logOutput} is {@code false}, output is captured
      * and included in the exception message if the process returns a non-zero exit code.
      *
      * @param description A description of the process.
      * @param builder The builder, which must be ready to start.
-     * @param log Log to write process output to. Output is captured if {@code null}.
+     * @param logOutput {@code true} if process output should be logged..
      * included in the exception message if the process returns a non-zero exit code.
      * @return The monitor.
      */
-    public static ProcessMonitor newMonitor(String description, ProcessBuilder builder, Log log) {
-        if (log == null) {
-            return newMonitor(description, builder, null, null);
+    public static ProcessMonitor newMonitor(String description, ProcessBuilder builder, boolean logOutput) {
+        if (logOutput) {
+            return newMonitor(description, builder, Log::info, Log::warn);
         } else {
-            return newMonitor(description, builder, line -> log.info(line), line -> log.warn(line));
+            return newMonitor(description, builder, null, null);
         }
     }
 
@@ -75,7 +72,8 @@ public class ProcessMonitor {
      * @param stdErr A consumer for the process error stream. Output is captured if {@code null}.
      * @return The monitor.
      */
-    public static ProcessMonitor newMonitor(String description, ProcessBuilder builder,
+    public static ProcessMonitor newMonitor(String description,
+                                            ProcessBuilder builder,
                                             Consumer<String> stdOut,
                                             Consumer<String> stdErr) {
         return new ProcessMonitor(builder, description, stdOut, stdErr);
@@ -85,7 +83,7 @@ public class ProcessMonitor {
         this.builder = requireNonNull(builder);
         this.description = requireNonNull(description);
         if (stdOut == null && stdErr == null) {
-            this.monitorOut = line -> LOG.info(line);
+            this.monitorOut = Log::info;
             this.capturing = true;
             this.stdOut = null;
             this.stdErr = null;

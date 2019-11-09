@@ -22,7 +22,7 @@ import java.nio.file.Paths;
 import java.util.List;
 
 import io.helidon.jre.TestFiles;
-import io.helidon.jre.common.util.ClassDataSharing;
+import io.helidon.jre.common.ClassDataSharing;
 
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;

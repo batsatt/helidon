@@ -30,7 +30,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import io.helidon.jre.common.logging.Log;
+import io.helidon.jre.common.Log;
 
 import jdk.internal.module.ModuleTarget;
 import jdk.internal.org.objectweb.asm.ClassWriter;
@@ -52,7 +52,6 @@ import static jdk.internal.org.objectweb.asm.Opcodes.ACC_TRANSITIVE;
  * Module descriptor utilities.
  */
 class ModuleDescriptors {
-    private static final Log LOG = Log.getLog("module-descriptors");
     private static final Set<String> AUTOMATIC_MODULES = synchronizedSet(new HashSet<>());
 
     /**
@@ -232,9 +231,9 @@ class ModuleDescriptors {
                 builder.requires(r);
             } else if (substitute.equals(moduleName)) {
                 // Drop it.
-                LOG.info("Dropping requires " + name + " from " + moduleName);
+                Log.info("Dropping requires " + name + " from " + moduleName);
             } else {
-                LOG.info("Substituting %s for %s in %s", substitute, name, moduleName);
+                Log.info("Substituting %s for %s in %s", substitute, name, moduleName);
                 if (r.compiledVersion().isPresent()) {
                     builder.requires(r.modifiers(), substitute, r.compiledVersion().get());
                 } else {
@@ -258,7 +257,7 @@ class ModuleDescriptors {
                         builder.requires(module);
                         allRequires.add(module);
                     } else {
-                        LOG.debug("Dropping requires " + module + " from " + moduleName);
+                        Log.debug("Dropping requires " + module + " from " + moduleName);
                     }
                 }
             });

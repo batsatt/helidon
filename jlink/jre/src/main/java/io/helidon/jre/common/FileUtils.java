@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.helidon.jre.common.util;
+package io.helidon.jre.common;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -39,9 +39,28 @@ public class FileUtils {
     public static final Path CURRENT_JAVA_HOME_DIR = Paths.get(System.getProperty("java.home"));
 
     /**
-     * The current directory.
+     * The working directory.
      */
-    public static final Path CURRENT_DIR = Paths.get(".").toAbsolutePath();
+    public static final Path WORKING_DIR = Paths.get(".").toAbsolutePath();
+
+    /**
+     * Returns the relative path from the working directory for the given path, if possible.
+     *
+     * @param path The path.
+     * @return The relative path or the original if it is not within the working directory.
+     */
+    public static Path fromWorking(Path path) {
+        try {
+            Path relativePath = WORKING_DIR.relativize(path);
+            if (relativePath.getName(0).toString().equals("..")) {
+                return path;
+            } else {
+                return relativePath;
+            }
+        } catch (IllegalArgumentException e) {
+            return path;
+        }
+    }
 
     /**
      * Ensure that the given path is an existing directory, creating it if required.

@@ -59,7 +59,7 @@ import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import io.helidon.jre.common.logging.Log;
+import io.helidon.jre.common.Log;
 
 import jdk.internal.module.Checks;
 import jdk.internal.module.DefaultRoots;
@@ -127,7 +127,6 @@ import static jdk.internal.org.objectweb.asm.Opcodes.T_BYTE;
 
 public final class BootModulesPlugin implements Plugin {
     private static final String NAME = "boot-modules";
-    private static final Log LOG = Log.getLog(NAME);
     private static final String DESCRIPTION =
         "Fast loading of module descriptors (always enabled)";
     private static final String SYSTEM_MODULES_MAP_CLASS =
@@ -173,7 +172,7 @@ public final class BootModulesPlugin implements Plugin {
 
     @Override
     public void configure(Map<String, String> config) {
-        LOG.info("BootModulesPlugin enabled: %s", enabled);
+        Log.info("BootModulesPlugin enabled: %s", enabled);
         String arg = config.get(NAME);
         if (arg != null) {
             throw new IllegalArgumentException(NAME + ": " + arg);
@@ -185,7 +184,7 @@ public final class BootModulesPlugin implements Plugin {
         if (!enabled) {
             throw new PluginException(NAME + " was set");
         }
-        LOG.info("Generating SystemModule classes");
+        Log.info("Generating SystemModule classes");
 
         // validate, transform (if needed), and add the module-info.class files
         List<ModuleInfo> moduleInfos = transformModuleInfos(in, out);
@@ -199,7 +198,7 @@ public final class BootModulesPlugin implements Plugin {
                           && !generated.contains(data.path()))
           .forEach(out::add);
 
-        LOG.info("Done generating SystemModule classes");
+        Log.info("Done generating SystemModule classes");
         return out.build();
     }
 
@@ -364,7 +363,7 @@ public final class BootModulesPlugin implements Plugin {
     }
 
     static void storeClass(String className, byte[] classData) {  // TODO REMOVE
-        LOG.info(" generated %s", className);
+        Log.info(" generated %s", className);
         /*
 
         final Path path = Paths.get("classes/" + className + ".class").toAbsolutePath();
@@ -463,7 +462,7 @@ public final class BootModulesPlugin implements Plugin {
                 try {
                     Checks.requirePackageName(pn);
                 } catch (IllegalArgumentException e) {
-                    LOG.warn("Ignoring illegal package name: %s", pn); // TODO auto
+                    Log.warn("Ignoring illegal package name: %s", pn); // TODO auto
                 }
             }
         }

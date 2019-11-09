@@ -33,7 +33,7 @@ import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 import java.util.spi.ToolProvider;
 
-import io.helidon.jre.common.logging.Log;
+import io.helidon.jre.common.Log;
 
 import jdk.tools.jlink.internal.Archive;
 
@@ -44,7 +44,6 @@ import static jdk.tools.jlink.internal.Archive.Entry.EntryType.CLASS_OR_RESOURCE
  * An archive representing an automatic module.
  */
 public class AutomaticArchive extends DelegatingArchive {
-    private static final Log LOG = Log.getLog("automatic-archive");
     private static final String EOL = System.getProperty("line.separator");
     private static final ToolProvider JDEPS = ToolProvider.findFirst("jdeps").orElseThrow();
     private final boolean isMultiRelease;
@@ -141,7 +140,7 @@ public class AutomaticArchive extends DelegatingArchive {
                                   if (provider.equals("not found")) {
                                       final DelegatingArchive exporter = archivesByPackage.get(pkgName);
                                       if (exporter == null) {
-                                          LOG.warn("Could not find exporter for required package %s", pkgName);
+                                          Log.warn("Could not find exporter for required package %s", pkgName);
                                       } else {
                                           dependencies.add(exporter.moduleName());
                                       }
@@ -151,26 +150,26 @@ public class AutomaticArchive extends DelegatingArchive {
                                       if (open > 0 && close > 0) {
                                           final String internalProvider = provider.substring(open + 1, close);
                                           if (internalProvider.contains(" ")) {
-                                              LOG.debug("Ignoring internal %s", internalProvider);
+                                              Log.debug("Ignoring internal %s", internalProvider);
                                           } else {
-                                              LOG.debug("Adding internal provider %s", internalProvider);
+                                              Log.debug("Adding internal provider %s", internalProvider);
                                               dependencies.add(internalProvider);
                                           }
                                       } else {
-                                          LOG.debug("Unknown provider format for package %s: %s", pkgName, provider);
+                                          Log.debug("Unknown provider format for package %s: %s", pkgName, provider);
                                       }
                                   } else {
-                                      LOG.debug("Unknown provider format for package %s: %s", pkgName, provider);
+                                      Log.debug("Unknown provider format for package %s: %s", pkgName, provider);
                                   }
                               } else {
                                   dependencies.add(provider);
                               }
                           }
                       } else {
-                          LOG.debug("Unknown result format: %s", mapping);
+                          Log.debug("Unknown result format: %s", mapping);
                       }
                   } else {
-                      LOG.debug("Unknown result format: %s", line);
+                      Log.debug("Unknown result format: %s", line);
                   }
               });
 
@@ -180,7 +179,7 @@ public class AutomaticArchive extends DelegatingArchive {
     @Override
     protected ModuleDescriptor updateDescriptor(ModuleDescriptor descriptor, Set<String> additionalRequires) {
         if (isMultiRelease) {
-            LOG.info("   Multi release version: %s", releaseFeatureVersion);
+            Log.info("   Multi release version: %s", releaseFeatureVersion);
         }
 
         // Setup excluded packages filter if needed
@@ -223,7 +222,7 @@ public class AutomaticArchive extends DelegatingArchive {
                 return null;
             }
         } catch (IOException e) {
-            LOG.warn("Error reading manifest: %s", e.getMessage());
+            Log.warn("Error reading manifest: %s", e.getMessage());
             throw new UncheckedIOException(e);
         }
     }
@@ -242,7 +241,7 @@ public class AutomaticArchive extends DelegatingArchive {
                 }
                 return true;
             });
-            excludedPackagePaths.forEach(pkg -> LOG.warn("excluding illegal package '%s' from module '%s", pkg, moduleName));
+            excludedPackagePaths.forEach(pkg -> Log.warn("excluding illegal package '%s' from module '%s", pkg, moduleName));
         }
     }
 }

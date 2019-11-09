@@ -25,16 +25,15 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Stream;
 
-import io.helidon.jre.common.logging.Log;
-import io.helidon.jre.common.util.FileUtils;
-import io.helidon.jre.common.util.JavaRuntime;
+import io.helidon.jre.common.FileUtils;
+import io.helidon.jre.common.JavaRuntime;
+import io.helidon.jre.common.Log;
 
 /**
  * A Helidon application supporting Java dependency collection and installation into a Java Home.
  * This class assumes that the application was built re
  */
 public class Application {
-    private static final Log LOG = Log.getLog("application");
     private static final Path APP_DIR = Paths.get("app");
     private static final Path ARCHIVE_PATH = Paths.get("lib/start.jsa");
     private static final String MP_FILE_PREFIX = "helidon-microprofile";
@@ -135,10 +134,10 @@ public class Application {
                     final Jar classPathJar = Jar.open(classPathEntry);
                     addClassPath(classPathJar, visited, classPath);
                 } catch (Exception e) {
-                    LOG.warn("Could not open class path jar: %s", classPathEntry);
+                    Log.warn("Could not open class path jar: %s", classPathEntry);
                 }
             } else {
-                LOG.debug("Ignoring class path entry: %s", classPathEntry);
+                Log.debug("Ignoring class path entry: %s", classPathEntry);
             }
         } else if (Files.isDirectory(classPathEntry)) {
             // This won't happen from a normal Helidon app build, but handle it for the custom case.

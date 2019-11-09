@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.helidon.jre.common.util;
+package io.helidon.jre.common;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;

@@ -19,8 +19,8 @@ package io.helidon.jre;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-import static io.helidon.jre.common.util.FileUtils.assertDir;
-import static io.helidon.jre.common.util.FileUtils.assertFile;
+import static io.helidon.jre.common.FileUtils.assertDir;
+import static io.helidon.jre.common.FileUtils.assertFile;
 
 /**
  * Test file utilities.

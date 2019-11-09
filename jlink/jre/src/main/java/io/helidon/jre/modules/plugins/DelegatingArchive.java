@@ -27,7 +27,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import io.helidon.jre.common.logging.Log;
+import io.helidon.jre.common.Log;
 
 import jdk.tools.jlink.internal.Archive;
 import org.jboss.jandex.IndexView;
@@ -38,7 +38,6 @@ import static java.util.stream.Collectors.toList;
  * An Archive wrapper base class.
  */
 public abstract class DelegatingArchive implements Archive, Comparable<DelegatingArchive> {
-    private static final Log LOG = Log.getLog("delegating-archive");
     private final Archive delegate;
     private final Set<String> allJdkModules;
     private final Set<String> jdkDependencies;
@@ -70,7 +69,7 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
 
         // Collect dependencies
 
-        LOG.info("Collecting dependencies of %s", description());
+        Log.info("Collecting dependencies of %s", description());
 
         this.dependencies.addAll(collectDependencies(context));
 
@@ -79,11 +78,11 @@ public abstract class DelegatingArchive implements Archive, Comparable<Delegatin
         this.jdkDependencies.addAll(dependencies.stream()
                                                 .filter(allJdkModules::contains)
                                                 .collect(Collectors.toSet()));
-        LOG.info("    Non-JDK dependencies: %s", dependencies.stream()
+        Log.info("    Non-JDK dependencies: %s", dependencies.stream()
                                                              .filter(s -> !jdkDependencies.contains(s))
                                                              .sorted()
                                                              .collect(toList()));
-        LOG.info("        JDK dependencies: %s", jdkDependencies.stream().sorted().collect(toList()));
+        Log.info("        JDK dependencies: %s", jdkDependencies.stream().sorted().collect(toList()));
 
         // Ensure index if CDI bean archive
 

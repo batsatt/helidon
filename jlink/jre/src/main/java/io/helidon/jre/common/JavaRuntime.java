@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.helidon.jre.common.util;
+package io.helidon.jre.common;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,10 +29,10 @@ import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
-import static io.helidon.jre.common.util.FileUtils.CURRENT_JAVA_HOME_DIR;
-import static io.helidon.jre.common.util.FileUtils.assertDir;
-import static io.helidon.jre.common.util.FileUtils.assertFile;
-import static io.helidon.jre.common.util.FileUtils.listFiles;
+import static io.helidon.jre.common.FileUtils.CURRENT_JAVA_HOME_DIR;
+import static io.helidon.jre.common.FileUtils.assertDir;
+import static io.helidon.jre.common.FileUtils.assertFile;
+import static io.helidon.jre.common.FileUtils.listFiles;
 import static java.util.Objects.requireNonNull;
 import static java.util.function.Function.identity;
 
@@ -66,7 +66,7 @@ public class JavaRuntime {
         if (jreDirectory == null) {
             final String jarName = requireNonNull(mainJar).getFileName().toString();
             final String dirName = jarName.substring(0, jarName.lastIndexOf('.')) + JRE_SUFFIX;
-            jreDirectory = FileUtils.CURRENT_DIR.resolve(dirName);
+            jreDirectory = FileUtils.WORKING_DIR.resolve(dirName);
         }
         if (Files.exists(jreDirectory)) {
             if (Files.isDirectory(jreDirectory)) {

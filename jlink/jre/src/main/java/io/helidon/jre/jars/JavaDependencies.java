@@ -27,8 +27,8 @@ import java.util.Set;
 import java.util.spi.ToolProvider;
 import java.util.stream.Stream;
 
-import io.helidon.jre.common.logging.Log;
-import io.helidon.jre.common.util.JavaRuntime;
+import io.helidon.jre.common.JavaRuntime;
+import io.helidon.jre.common.Log;
 
 import static java.util.Objects.requireNonNull;
 
@@ -36,7 +36,6 @@ import static java.util.Objects.requireNonNull;
  * Collects Java module dependencies for a set of jars.
  */
 public class JavaDependencies {
-    private static final Log LOG = Log.getLog("java-dependencies");
     private static final String JDEPS_TOOL_NAME = "jdeps";
     private static final String MULTI_RELEASE_ARG = "--multi-release";
     private static final String SYSTEM_ARG = "--system";
@@ -100,7 +99,7 @@ public class JavaDependencies {
     }
 
     private void addJar(Jar jar) {
-        LOG.info("Collecting dependencies of %s", jar.path());
+        Log.info("Collecting dependencies of %s", jar);
         final List<String> args = new ArrayList<>();
         if (!javaHome.isCurrent()) {
             args.add(SYSTEM_ARG);
@@ -116,7 +115,7 @@ public class JavaDependencies {
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
         final int result = JDEPS.run(new PrintStream(out), System.err, args.toArray(new String[0]));
         if (result != 0) {
-            throw new RuntimeException("Could not collect dependencies of " + jar.path());
+            throw new RuntimeException("Could not collect dependencies of " + jar);
         }
 
         Arrays.stream(out.toString().split(EOL))

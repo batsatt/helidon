@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import io.helidon.jre.common.logging.Log;
+import io.helidon.jre.common.Log;
 
 import jdk.tools.jlink.plugin.Plugin;
 import jdk.tools.jlink.plugin.PluginException;
@@ -39,7 +39,6 @@ import static java.util.stream.Collectors.toList;
  */
 public class BootOrderPlugin implements Plugin {
     public static final String NAME = "boot-order";
-    private static final Log LOG = Log.getLog(NAME);
     private static final String JAVA_BASE = "java.base";
     private static final String JAVA_BASE_PREFIX = "/" + JAVA_BASE + "/";
     private static final String SYSTEM_MODULES_PATH_PREFIX = JAVA_BASE_PREFIX + "jdk/internal/module/SystemModules";
@@ -63,7 +62,7 @@ public class BootOrderPlugin implements Plugin {
 
     @Override
     public ResourcePool transform(ResourcePool in, ResourcePoolBuilder out) {
-        LOG.info("Sorting by application boot class order");
+        Log.info("Sorting by application boot class order");
 
         // TODO: Why compute classlist file in HelidonPlugin? Only required if Linker needs the file to create the
         //       archive, but... we're no longer using it, so build the class list here.
@@ -126,7 +125,7 @@ public class BootOrderPlugin implements Plugin {
         bootClassList.forEach(path -> {
             final ResourcePoolEntry entry = bootEntries.get(path);
             if (entry == null) {
-                LOG.debug("Did not find boot class %s in entries", path);
+                Log.debug("Did not find boot class %s in entries", path);
             } else {
                 out.add(entry);
                 copied.add(entry.path());
@@ -139,7 +138,7 @@ public class BootOrderPlugin implements Plugin {
           .filter(entry -> !copied.contains(entry.path()))
           .forEach(out::add);
 
-        LOG.info("Creating JRE");
+        Log.info("Creating JRE");
         return out.build();
     }
 }

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.helidon.jre.common.util;
+package io.helidon.jre.common;
 
 import java.io.File;
 import java.io.IOException;
@@ -27,10 +27,8 @@ import java.util.List;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
-import io.helidon.jre.common.logging.Log;
-
-import static io.helidon.jre.common.util.FileUtils.assertDir;
-import static io.helidon.jre.common.util.FileUtils.assertFile;
+import static io.helidon.jre.common.FileUtils.assertDir;
+import static io.helidon.jre.common.FileUtils.assertFile;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -118,7 +116,6 @@ public class ClassDataSharing {
     }
 
     public static class Builder {
-        private static final Log LOG = Log.getLog("class-data-sharing");
         private static final String FILE_PREFIX = "start";
         private static final String ARCHIVE_NAME = FILE_PREFIX + ".jsa";
         private static final String CLASS_LIST_FILE_SUFFIX = ".classlist";
@@ -145,8 +142,7 @@ public class ClassDataSharing {
         private String target;
         private String targetOption;
         private String targetDescription;
-        private Log outputLog;
-
+        private boolean logOutput;
 
         private Builder() {
             this.createArchive = true;
@@ -234,7 +230,7 @@ public class ClassDataSharing {
          * @return The builder.
          */
         public Builder logOutput(boolean logOutput) {
-            this.outputLog = logOutput ? LOG : null;
+            this.logOutput = logOutput;
             return this;
         }
 
@@ -264,7 +260,7 @@ public class ClassDataSharing {
             } else if (mainJar != null) {
                 this.targetOption = "-jar";
                 this.target = mainJar.toString();
-                this.targetDescription = target;
+                this.targetDescription = mainJar.getFileName().toString();
             } else {
                 this.targetOption = "-m";
                 this.target = applicationModule;
@@ -307,7 +303,7 @@ public class ClassDataSharing {
                         classList.addAll(beanArchiveScannerIndex, classes);
                     }
                 } else {
-                    LOG.warn("weldJrtJar provided but %s not found", BEAN_ARCHIVE_SCANNER);
+                    Log.warn("weldJrtJar provided but %s not found", BEAN_ARCHIVE_SCANNER);
                 }
             }
         }
@@ -340,7 +336,7 @@ public class ClassDataSharing {
 
             builder.directory(jre.toFile());
 
-            ProcessMonitor.newMonitor(action, builder, outputLog).run();
+            ProcessMonitor.newMonitor(action, builder, logOutput).run();
         }
 
         private Path javaPath() {

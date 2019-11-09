@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
-import io.helidon.jre.common.util.JavaRuntime;
+import io.helidon.jre.common.JavaRuntime;
 
 import static java.util.Objects.requireNonNull;
 

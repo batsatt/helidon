@@ -20,12 +20,14 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-import io.helidon.jre.common.util.FileUtils;
-import io.helidon.jre.common.util.JavaRuntime;
+import io.helidon.jre.common.FileUtils;
+import io.helidon.jre.common.JavaRuntime;
+import io.helidon.jre.common.Log;
+import io.helidon.jre.common.SystemLogWriter;
 
-import static io.helidon.jre.common.util.FileUtils.CURRENT_JAVA_HOME_DIR;
-import static io.helidon.jre.common.util.FileUtils.assertDir;
-import static io.helidon.jre.common.util.FileUtils.assertFile;
+import static io.helidon.jre.common.FileUtils.CURRENT_JAVA_HOME_DIR;
+import static io.helidon.jre.common.FileUtils.assertDir;
+import static io.helidon.jre.common.FileUtils.assertFile;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -123,6 +125,7 @@ public class Configuration {
         private boolean stripDebug;
         private JavaRuntime jdk;
         private boolean cds;
+        private Log.Writer logWriter;
 
         private Builder() {
             jdkDirectory = CURRENT_JAVA_HOME_DIR;
@@ -240,6 +243,17 @@ public class Configuration {
         }
 
         /**
+         * Sets the log writer.
+         *
+         * @param logWriter The writer.
+         * @return The builder.
+         */
+        public Builder logWriter(Log.Writer logWriter) {
+            this.logWriter = requireNonNull(logWriter);
+            return this;
+        }
+
+        /**
          * Sets whether or not to strip debug information from JDK classes.
          *
          * @param stripDebug {@code true} if debug information should be stripped.
@@ -262,6 +276,10 @@ public class Configuration {
             }
             jdk = JavaRuntime.jdk(jdkDirectory);
             jreDirectory = JavaRuntime.prepareJreDirectory(jreDirectory, mainJar, replace);
+            if (logWriter == null) {
+                logWriter = new SystemLogWriter(verbose ? Log.Level.DEBUG : Log.Level.INFO);
+            }
+            Log.setWriter(logWriter);
             return new Configuration(this);
         }
 

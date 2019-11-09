@@ -15,8 +15,7 @@
  */
 module helidon.jre {
     exports io.helidon.jre.modules.plugins;
-    exports io.helidon.jre.common.logging;
-    exports io.helidon.jre.common.util;
+    exports io.helidon.jre.common;
 
     requires jdk.jlink;
     requires java.instrument;

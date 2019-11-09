@@ -21,21 +21,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.helidon.jre.TestFiles;
-import io.helidon.jre.common.logging.Log;
-import io.helidon.jre.common.util.FileUtils;
-import io.helidon.jre.common.util.JavaRuntime;
-import io.helidon.jre.common.util.ProcessMonitor;
+import io.helidon.jre.common.Log;
+import io.helidon.jre.common.FileUtils;
+import io.helidon.jre.common.JavaRuntime;
+import io.helidon.jre.common.ProcessMonitor;
 
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-import static io.helidon.jre.common.util.FileUtils.CURRENT_JAVA_HOME_DIR;
+import static io.helidon.jre.common.FileUtils.CURRENT_JAVA_HOME_DIR;
 
 /**
  * Unit test for class {@link ModulesLinker}.
  */
 class ModulesLinkerTest {
-    private static final Log LOG = Log.getLog("modules-linker-test");
     private static final List<String> DEBUG_ARGS = List.of("-Xdebug",
                                                            "-Xnoagent",
                                                            "-Djava.compiler=none",
@@ -69,8 +68,8 @@ class ModulesLinkerTest {
 
         ProcessBuilder builder = new ProcessBuilder().directory(TestFiles.currentDir().toFile())
                                                      .command(command);
-        ProcessMonitor.newMonitor("Building " + jreDirectory, builder, LOG).run();
-        LOG.info("\n\n");
+        ProcessMonitor.newMonitor("Building " + jreDirectory, builder, true).run();
+        Log.info("\n\n");
         return jreDirectory;
     }
 

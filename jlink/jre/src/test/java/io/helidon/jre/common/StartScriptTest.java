@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.helidon.jre.jars.util;
+package io.helidon.jre.common;
 
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -24,9 +24,6 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.util.Set;
 
 import io.helidon.jre.TestFiles;
-import io.helidon.jre.common.util.FileUtils;
-import io.helidon.jre.common.util.StartScript;
-import io.helidon.jre.common.util.StreamUtils;
 
 import org.junit.jupiter.api.Test;
 

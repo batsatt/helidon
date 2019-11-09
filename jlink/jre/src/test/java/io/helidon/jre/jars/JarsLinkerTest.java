@@ -23,7 +23,7 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.util.Set;
 
 import io.helidon.jre.TestFiles;
-import io.helidon.jre.common.util.FileUtils;
+import io.helidon.jre.common.FileUtils;
 
 import org.junit.jupiter.api.Test;
 

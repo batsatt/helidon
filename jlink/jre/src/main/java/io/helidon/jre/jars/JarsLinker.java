@@ -20,22 +20,23 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.logging.Level;
 import java.util.spi.ToolProvider;
 
-import io.helidon.jre.common.logging.Log;
-import io.helidon.jre.common.util.ClassDataSharing;
-import io.helidon.jre.common.util.JavaRuntime;
-import io.helidon.jre.common.util.StartScript;
+import io.helidon.jre.common.ClassDataSharing;
+import io.helidon.jre.common.JavaRuntime;
+import io.helidon.jre.common.Log;
+import io.helidon.jre.common.StartScript;
+
+import static io.helidon.jre.common.FileUtils.fromWorking;
 
 /**
  * Create a custom JRE by finding the Java modules required of a Helidon application and linking them via jlink,
  * then adding the jars, a start script and, optionally, a CDS archive. Adds Jandex indices as needed.
  */
 public class JarsLinker {
-    private static final Log LOG = Log.getLog("jars-linker");
     private static final String JLINK_TOOL_NAME = "jlink";
     private static final String JLINK_DEBUG_PROPERTY = JLINK_TOOL_NAME + ".debug";
+    private static final boolean WINDOWS = System.getProperty("os.name").toLowerCase().contains("win");
     private final ToolProvider jlink;
     private final List<String> jlinkArgs;
     private Configuration config;
@@ -73,7 +74,6 @@ public class JarsLinker {
         this.jlinkArgs = new ArrayList<>();
         this.config = config;
         if (config.verbose()) {
-            Log.setAllLevels(Level.FINEST);
             System.setProperty(JLINK_DEBUG_PROPERTY, "true");
         }
     }
@@ -106,14 +106,14 @@ public class JarsLinker {
     }
 
     private void buildApplication() {
-        LOG.info("Loading application jars");
+        Log.info("Loading application jars");
         this.application = new Application(config.mainJar());
     }
 
     private void collectJavaDependencies() {
-        LOG.info("Collecting Java module dependencies");
+        Log.info("Collecting Java module dependencies");
         this.javaDependencies = application.javaDependencies(config.jdk());
-        LOG.info("Found %d Java module dependencies: %s", javaDependencies.size(), String.join(", ", javaDependencies));
+        Log.info("Found %d Java module dependencies: %s", javaDependencies.size(), String.join(", ", javaDependencies));
     }
 
     private void buildJlinkArguments() {
@@ -137,7 +137,7 @@ public class JarsLinker {
     }
 
     private void buildJre() {
-        LOG.info("Building Helidon JRE: %s", config.jreDirectory());
+        Log.info("Building Helidon JRE: %s", jreDirectory());
         final int result = jlink.run(System.out, System.err, jlinkArgs.toArray(new String[0]));
         if (result != 0) {
             throw new Error("Helidon JRE creation failed.");
@@ -146,7 +146,7 @@ public class JarsLinker {
     }
 
     private void installJars() {
-        LOG.info("Copying %d application jars to %s", application.size(), config.jreDirectory());
+        Log.info("Copying %d application jars to %s", application.size(), jreDirectory());
         this.jreMainJar = application.install(jre);
     }
 
@@ -166,14 +166,23 @@ public class JarsLinker {
     }
 
     private void installStartScript() {
-        StartScript.newScript(jreMainJar)
-                   .install(jre.path());
+        if (!WINDOWS) {
+            StartScript.newScript(jreMainJar)
+                       .install(jre.path());
+        }
     }
 
     private void complete(long startTime) {
         final long elapsed = System.currentTimeMillis() - startTime;
         final float startSeconds = elapsed / 1000F;
-        LOG.info("Helidon JRE completed in %.1f seconds: %s", startSeconds, config.jreDirectory());
+        Log.info("Helidon JRE completed in %.1f seconds", startSeconds);
+        if (!WINDOWS) {
+            Log.info("See %s/start --help", jreDirectory().resolve("bin"));
+        }
+    }
+
+    private Path jreDirectory() {
+        return fromWorking(config.jreDirectory());
     }
 
     private void addArgument(String argument) {

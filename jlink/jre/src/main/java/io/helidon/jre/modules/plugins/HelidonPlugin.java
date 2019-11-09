@@ -46,10 +46,10 @@ import java.util.jar.Manifest;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import io.helidon.jre.common.logging.Log;
-import io.helidon.jre.common.util.ClassDataSharing;
-import io.helidon.jre.common.util.StreamUtils;
-import io.helidon.jre.common.util.JavaRuntime;
+import io.helidon.jre.common.Log;
+import io.helidon.jre.common.ClassDataSharing;
+import io.helidon.jre.common.StreamUtils;
+import io.helidon.jre.common.JavaRuntime;
 
 import jdk.internal.module.ModulePath;
 import jdk.tools.jlink.internal.Archive;
@@ -74,7 +74,6 @@ public class HelidonPlugin implements Plugin {
     public static final String JDK_KEY = "jdk";
     public static final String PATCHES_DIR_KEY = "patchesDir";
     public static final String WELD_JRT_MODULE_KEY = "weldJrtModule";
-    private static final Log LOG = Log.getLog(NAME);
     private static final String MICROPROFILE_MODULE_QUALIFIER = "io.helidon.microprofile.";
     private static final String WELD_MODULE_QUALIFIER = "weld.";
     private static final String AUTOMATIC_MODULE_NAME = "Automatic-Module-Name";
@@ -139,27 +138,27 @@ public class HelidonPlugin implements Plugin {
         classListFile = createClassListFile();
         classList = readAllLines(classListFile);
 
-        LOG.info("Application configuration:\n");
-        LOG.info("       java home: %s", jdk);
-        LOG.info("    java version: %s", javaBaseVersion);
-        LOG.info("   appModuleName: %s", appModuleName);
-        LOG.info("   appModulePath: %s", appModulePath);
-        LOG.info("      appLibsDir: %s", appLibsDir);
-        LOG.info(" startup classes: %d\n", classList.size());
+        Log.info("Application configuration:\n");
+        Log.info("       java home: %s", jdk);
+        Log.info("    java version: %s", javaBaseVersion);
+        Log.info("   appModuleName: %s", appModuleName);
+        Log.info("   appModulePath: %s", appModulePath);
+        Log.info("      appLibsDir: %s", appLibsDir);
+        Log.info(" startup classes: %d\n", classList.size());
     }
 
     @Override
     public ResourcePool transform(ResourcePool in, ResourcePoolBuilder out) {
         try {
-            LOG.info("Collecting application modules");
+            Log.info("Collecting application modules");
             appModule = ModuleFinder.of(appModulePath).find(appModuleName).orElseThrow();
             appLibModules = toModules(appLibsDir, false);
 
-            LOG.info("Opening application modules");
+            Log.info("Opening application modules");
             collectAppArchives();
             removeDuplicateExporters();
             handleMicroprofile();
-            LOG.info("Preparing application modules");
+            Log.info("Preparing application modules");
             final ApplicationContext context = createContext();
             appArchives.forEach(archive -> archive.prepare(context));
 
@@ -169,12 +168,12 @@ public class HelidonPlugin implements Plugin {
             javaDependencies = appArchives.stream()
                                           .flatMap(a -> a.jdkDependencies().stream())
                                           .collect(toSet());
-            LOG.info("Directly required Java modules: %s", javaDependencies);
-            LOG.info("Collecting closure of Java modules");
+            Log.info("Directly required Java modules: %s", javaDependencies);
+            Log.info("Collecting closure of Java modules");
             collectRequiredJavaArchives();
             sortArchives();
-            LOG.info("\n%d Java modules: %s", javaArchives.size(), javaArchives);
-            LOG.info("\n%d App modules: %s\n", appArchives.size(), appArchives);
+            Log.info("\n%d Java modules: %s", javaArchives.size(), javaArchives);
+            Log.info("\n%d App modules: %s\n", appArchives.size(), appArchives);
             collectPatchEntries();
             addEntries(out);
             return out.build();
@@ -292,11 +291,11 @@ public class HelidonPlugin implements Plugin {
                             addModule(entry, jmods, modules);
                         } catch (FindException e2) {
                             error.set(true);
-                            LOG.warn(e2.getMessage());
+                            Log.warn(e2.getMessage());
                         }
                     } else {
                         error.set(true);
-                        LOG.warn(e.getMessage());
+                        Log.warn(e.getMessage());
                     }
                 }
             }
@@ -379,7 +378,7 @@ public class HelidonPlugin implements Plugin {
                                                         .filter(r -> r != selected)
                                                         .map(r -> Paths.get(r.location().orElseThrow().getPath()).getFileName())
                                                         .collect(toList());
-            LOG.warn("Duplicate '%s' modules: selected %s, ignoring %s", selected.descriptor().name(),
+            Log.warn("Duplicate '%s' modules: selected %s, ignoring %s", selected.descriptor().name(),
                      selectedFile, duplicateFiles);
             return selected;
         }
@@ -433,7 +432,7 @@ public class HelidonPlugin implements Plugin {
                    final String javaxName = JAVAX_PREFIX + name.substring(JAKARTA_PREFIX.length());
                    final DelegatingArchive javaxArchive = byName.get(javaxName);
                    if (javaxArchive != null) {
-                       LOG.info("Found duplicate %s and %s", javaxArchive, name);
+                       Log.info("Found duplicate %s and %s", javaxArchive, name);
                        jakartaSubstitutionNames.put(javaxName, name);
                    }
                }
@@ -457,7 +456,7 @@ public class HelidonPlugin implements Plugin {
             if (exporters.size() > 1) {
                 selected = selectExporter(exporters);
                 exporters.remove(selected);
-                LOG.warn("Multiple modules export '%s': selected '%s', removing %s", packageName,
+                Log.warn("Multiple modules export '%s': selected '%s', removing %s", packageName,
                          selected.moduleName(), exporters);
                 removals.addAll(exporters);
                 final String selectedModuleName = selected.moduleName();
@@ -609,7 +608,7 @@ public class HelidonPlugin implements Plugin {
                    .forEach(required -> {
                        final DelegatingArchive javaArchive = allJavaArchives.get(required);
                        if (javaArchive == null) {
-                           LOG.warn("Could not find required java module %s, required by %s",
+                           Log.warn("Could not find required java module %s, required by %s",
                                     required, archive.moduleName());
                            // TODO: should these be added as static requires?
                        } else if (!added.contains(javaArchive.moduleName())) {
@@ -645,7 +644,7 @@ public class HelidonPlugin implements Plugin {
         final String fileName = modulePath.getFileName().toString();
         final Runtime.Version version = versionOf(descriptor);
 
-        LOG.info("Opening %smodule '%s@%s' at %s", automatic ? "automatic " : "", moduleName, version, modulePath);
+        Log.info("Opening %smodule '%s@%s' at %s", automatic ? "automatic " : "", moduleName, version, modulePath);
 
         Archive archive;
         if (Files.isDirectory(modulePath)) {
@@ -677,7 +676,7 @@ public class HelidonPlugin implements Plugin {
             if (version.endsWith(".0")) {
                 return toRuntimeVersion(version.substring(0, version.length() - 2));
             } else {
-                LOG.debug("Cannot parse version '%s', using JDK version '%s'", version, javaBaseVersion);
+                Log.debug("Cannot parse version '%s', using JDK version '%s'", version, javaBaseVersion);
                 return javaBaseVersion;
             }
         }

@@ -45,8 +45,8 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import java.util.zip.ZipEntry;
 
-import io.helidon.jre.common.logging.Log;
-import io.helidon.jre.common.util.StreamUtils;
+import io.helidon.jre.common.Log;
+import io.helidon.jre.common.StreamUtils;
 
 import org.jboss.jandex.Index;
 import org.jboss.jandex.IndexReader;
@@ -54,15 +54,14 @@ import org.jboss.jandex.IndexWriter;
 import org.jboss.jandex.Indexer;
 import org.jboss.jandex.UnsupportedVersion;
 
-import static io.helidon.jre.common.util.FileUtils.assertDir;
-import static io.helidon.jre.common.util.FileUtils.assertFile;
+import static io.helidon.jre.common.FileUtils.assertDir;
+import static io.helidon.jre.common.FileUtils.assertFile;
 import static java.util.Collections.emptyList;
 
 /**
  * CDI BeansArchive aware jar wrapper. Supports creating an index if missing and adding it during copy.
  */
 public class Jar {
-    private static final Log LOG = Log.getLog("jar");
     private static final String JMOD_SUFFIX = ".jmod";
     private static final Set<String> SUPPORTED_SUFFIXES = Set.of(".jar", ".zip", JMOD_SUFFIX);
     private static final String BEANS_PATH = "META-INF/beans.xml";
@@ -302,7 +301,7 @@ public class Jar {
                 PosixFilePermission.OTHERS_READ
             ));
         } catch (IOException e) {
-            LOG.warn("Unable to set %s read-only: %s", e.getMessage());
+            Log.warn("Unable to set %s read-only: %s", e.getMessage());
         }
         return targetFile;
     }
@@ -332,7 +331,7 @@ public class Jar {
             }
             if (index == null) {
                 if (isSigned) {
-                    LOG.warn("Cannot add Jandex index to signed jar %s", name());
+                    Log.warn("Cannot add Jandex index to signed jar %s", name());
                 } else {
                     index = buildIndex();
                     builtIndex = true;
@@ -342,27 +341,27 @@ public class Jar {
     }
 
     private Index loadIndex() {
-        LOG.debug("Loading Jandex index for %s", this);
+        Log.debug("Loading Jandex index for %s", this);
         try (InputStream in = getEntry(JANDEX_INDEX_PATH).data()) {
             return new IndexReader(in).read();
         } catch (IllegalArgumentException e) {
-            LOG.warn("Jandex index in %s is not valid: %s", path, e.getMessage());
+            Log.warn("Jandex index in %s is not valid: %s", path, e.getMessage());
         } catch (UnsupportedVersion e) {
-            LOG.warn("Jandex index in %s is an unsupported version: %s", path, e.getMessage());
+            Log.warn("Jandex index in %s is an unsupported version: %s", path, e.getMessage());
         } catch (IOException e) {
-            LOG.warn("Jandex index in %s cannot be read: %s", path, e.getMessage());
+            Log.warn("Jandex index in %s cannot be read: %s", path, e.getMessage());
         }
         return null;
     }
 
     private Index buildIndex() {
-        LOG.info("Building index for CDI beans archive %s", this);
+        Log.info("Building index for CDI beans archive %s", this);
         final Indexer indexer = new Indexer();
         classEntries().forEach(entry -> {
             try {
                 indexer.index(entry.data());
             } catch (IOException e) {
-                LOG.warn("Could not index class %s in %s: %s", entry.path(), this, e.getMessage());
+                Log.warn("Could not index class %s in %s: %s", entry.path(), this, e.getMessage());
             }
         });
         return indexer.complete();
@@ -458,7 +457,7 @@ public class Jar {
             jar.flush();
             jar.closeEntry();
         } catch (IOException e) {
-            LOG.warn("Unable to add index: %s", e);
+            Log.warn("Unable to add index: %s", e);
         }
     }
 
