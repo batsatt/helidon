@@ -16,12 +16,7 @@
 
 package io.helidon.jre.jars;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -31,19 +26,16 @@ import java.util.spi.ToolProvider;
 import io.helidon.jre.common.logging.Log;
 import io.helidon.jre.common.util.ClassDataSharing;
 import io.helidon.jre.common.util.JavaRuntime;
-import io.helidon.jre.common.util.StreamUtils;
+import io.helidon.jre.common.util.StartScript;
 
 /**
- * Create a custom JRE by finding the Java modules required of a Helidon application and linking
- * them via jlink, then adding the jars and, optionally, a CDS archive. Adds Jandex indices as needed.
+ * Create a custom JRE by finding the Java modules required of a Helidon application and linking them via jlink,
+ * then adding the jars, a start script and, optionally, a CDS archive. Adds Jandex indices as needed.
  */
 public class JarsLinker {
     private static final Log LOG = Log.getLog("jars-linker");
     private static final String JLINK_TOOL_NAME = "jlink";
     private static final String JLINK_DEBUG_PROPERTY = JLINK_TOOL_NAME + ".debug";
-    private static final String SCRIPT_TEMPLATE_PATH = "server-template.sh";
-    private static final String SCRIPT_MAIN_JAR_NAME = "<MAIN_JAR_NAME>";
-    private static final String SCRIPT_PATH = "bin/server";
     private final ToolProvider jlink;
     private final List<String> jlinkArgs;
     private Configuration config;
@@ -97,9 +89,9 @@ public class JarsLinker {
         collectJavaDependencies();
         buildJlinkArguments();
         buildJre();
-        copyJars();
-        buildCdsArchive();
-        addServerScript();
+        installJars();
+        installCdsArchive();
+        installStartScript();
         complete(startTime);
         return config.jreDirectory();
     }
@@ -153,17 +145,18 @@ public class JarsLinker {
         jre = JavaRuntime.jre(config.jreDirectory(), config.jdk().version());
     }
 
-    private void copyJars() {
+    private void installJars() {
         LOG.info("Copying %d application jars to %s", application.size(), config.jreDirectory());
         this.jreMainJar = application.install(jre);
     }
 
-    private void buildCdsArchive() {
+    private void installCdsArchive() {
         if (config.cds()) {
             try {
                 ClassDataSharing.builder()
                                 .jre(jre.path())
                                 .applicationJar(jreMainJar)
+                                .archiveFile(application.archivePath())
                                 .logOutput(config.verbose())
                                 .build();
             } catch (Exception e) {
@@ -172,25 +165,9 @@ public class JarsLinker {
         }
     }
 
-    private void addServerScript() {
-        try {
-            final String mainJarName = jreMainJar.getFileName().toString();
-            final String template = StreamUtils.toString(getClass().getClassLoader().getResourceAsStream(SCRIPT_TEMPLATE_PATH));
-            final String script = template.replace(SCRIPT_MAIN_JAR_NAME, mainJarName);
-            final Path scriptFile = jre.path().resolve(SCRIPT_PATH);
-            Files.copy(new ByteArrayInputStream(script.getBytes()), scriptFile);
-            Files.setPosixFilePermissions(scriptFile, Set.of(
-                PosixFilePermission.OWNER_READ,
-                PosixFilePermission.OWNER_WRITE,
-                PosixFilePermission.OWNER_EXECUTE,
-                PosixFilePermission.GROUP_READ,
-                PosixFilePermission.GROUP_EXECUTE,
-                PosixFilePermission.OTHERS_READ,
-                PosixFilePermission.OTHERS_EXECUTE
-            ));
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+    private void installStartScript() {
+        StartScript.newScript(jreMainJar)
+                   .install(jre.path());
     }
 
     private void complete(long startTime) {

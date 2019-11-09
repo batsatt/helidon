@@ -69,7 +69,7 @@ class ModulesLinkerTest {
 
         ProcessBuilder builder = new ProcessBuilder().directory(TestFiles.currentDir().toFile())
                                                      .command(command);
-        ProcessMonitor.newMonitor(builder, "Building " + jreDirectory, LOG).run();
+        ProcessMonitor.newMonitor("Building " + jreDirectory, builder, LOG).run();
         LOG.info("\n\n");
         return jreDirectory;
     }
@@ -79,7 +79,7 @@ class ModulesLinkerTest {
         Path jre = link(TestFiles.helidonSeJar(), "se");
         FileUtils.assertDir(jre);
         Path libDir = FileUtils.assertDir(jre.resolve("lib"));
-        Path archiveFile = FileUtils.assertFile(libDir.resolve("server.jsa"));
+        Path archiveFile = FileUtils.assertFile(libDir.resolve("start.jsa"));
     }
 
     @Test
@@ -88,6 +88,6 @@ class ModulesLinkerTest {
         Path jre = link(TestFiles.helidonMpJar(), "mp");
         FileUtils.assertDir(jre);
         Path libDir = FileUtils.assertDir(jre.resolve("lib"));
-        Path archiveFile = FileUtils.assertFile(libDir.resolve("server.jsa"));
+        Path archiveFile = FileUtils.assertFile(libDir.resolve("start.jsa"));
     }
 }

@@ -36,6 +36,7 @@ import io.helidon.jre.common.util.JavaRuntime;
 public class Application {
     private static final Log LOG = Log.getLog("application");
     private static final Path APP_DIR = Paths.get("app");
+    private static final Path ARCHIVE_PATH = Paths.get("lib/start.jsa");
     private static final String MP_FILE_PREFIX = "helidon-microprofile";
     private final Jar mainJar;
     private final List<Jar> classPath;
@@ -78,6 +79,15 @@ public class Application {
             jar.copyToDirectory(installDir, isMicroprofile());
         });
         return installedAppJar;
+    }
+
+    /**
+     * Returns the relative path at which to create the CDS archive.
+     *
+     * @return The path.
+     */
+    public Path archivePath() {
+        return ARCHIVE_PATH;
     }
 
     /**

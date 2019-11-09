@@ -17,6 +17,7 @@
 package io.helidon.jre.common.util;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
@@ -28,10 +29,11 @@ import java.util.function.Consumer;
 
 import io.helidon.jre.common.logging.Log;
 
+import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Executes a process and waits for completion, monitoring and optionally logging the combined output.
+ * Executes a process and waits for completion, monitoring the output.
  */
 public class ProcessMonitor {
     private static final Log LOG = Log.getLog("processes");
@@ -39,49 +41,79 @@ public class ProcessMonitor {
     private static final ExecutorService EXECUTOR = ForkJoinPool.commonPool();
     private final ProcessBuilder builder;
     private final String description;
-    private final Log executionLog;
     private final boolean capturing;
     private final List<String> capturedOutput;
-    private final Consumer<String> processOutput;
+    private final Consumer<String> monitorOut;
+    private final Consumer<String> stdOut;
+    private final Consumer<String> stdErr;
 
     /**
-     * Returns a new monitor for the given {@link ProcessBuilder}.
+     * Returns a new monitor for the given {@link ProcessBuilder}. If {@code log} is {@code null}, output is captured
+     * and included in the exception message if the process returns a non-zero exit code.
      *
-     * @param builder The builder, which must be ready to start.
      * @param description A description of the process.
-     * @param log Log to write process output to. May be {@code null} if output should only be logged on failure.
+     * @param builder The builder, which must be ready to start.
+     * @param log Log to write process output to. Output is captured if {@code null}.
+     * included in the exception message if the process returns a non-zero exit code.
      * @return The monitor.
      */
-    public static ProcessMonitor newMonitor(ProcessBuilder builder, String description, Log log) {
-        return new ProcessMonitor(builder, description, log);
+    public static ProcessMonitor newMonitor(String description, ProcessBuilder builder, Log log) {
+        if (log == null) {
+            return newMonitor(description, builder, null, null);
+        } else {
+            return newMonitor(description, builder, line -> log.info(line), line -> log.warn(line));
+        }
     }
 
-    private ProcessMonitor(ProcessBuilder builder, String description, Log log) {
+    /**
+     * Returns a new monitor for the given {@link ProcessBuilder}. If both {@code stdOut} and {@code stdErr} are
+     * {@code null}, output is captured and included in the exception message if the process returns a non-zero exit code.
+     *
+     * @param description A description of the process.
+     * @param builder The builder, which must be ready to start.
+     * @param stdOut A consumer for the process output stream. Output is captured if {@code null}.
+     * @param stdErr A consumer for the process error stream. Output is captured if {@code null}.
+     * @return The monitor.
+     */
+    public static ProcessMonitor newMonitor(String description, ProcessBuilder builder,
+                                            Consumer<String> stdOut,
+                                            Consumer<String> stdErr) {
+        return new ProcessMonitor(builder, description, stdOut, stdErr);
+    }
+
+    private ProcessMonitor(ProcessBuilder builder, String description, Consumer<String> stdOut, Consumer<String> stdErr) {
         this.builder = requireNonNull(builder);
         this.description = requireNonNull(description);
-        this.executionLog = log == null ? LOG : log;
-        this.capturedOutput = new ArrayList<>();
-        if (log == null) {
-            capturing = true;
-            processOutput = capturedOutput::add;
+        if (stdOut == null && stdErr == null) {
+            this.monitorOut = line -> LOG.info(line);
+            this.capturing = true;
+            this.stdOut = null;
+            this.stdErr = null;
+            this.capturedOutput = new ArrayList<>();
+        } else if (stdOut != null && stdErr != null) {
+            this.monitorOut = stdOut;
+            this.capturing = false;
+            this.stdOut = stdOut;
+            this.stdErr = stdErr;
+            this.capturedOutput = emptyList();
         } else {
-            capturing = false;
-            processOutput = line -> log.info(line);
+            throw new IllegalArgumentException("stdOut and stdErr must both be valid or both be null");
         }
     }
 
     /**
      * Starts the process and waits for completion.
      *
-     * @throws Exception If the process fails.
+     * @throws IOException If the process fails.
      */
-    public void run() throws Exception {
-        executionLog.info(capturing ? description : (description + EOL));
-        builder.redirectErrorStream(true); // Merge streams
+    public void run() throws IOException, InterruptedException {
+        monitorOut.accept(capturing ? description : (description + EOL));
         final Process process = builder.start();
-        final Future output = EXECUTOR.submit(new StreamConsumer(process.getInputStream(), processOutput));
+        final Future out = monitor(process.getInputStream(), stdOut);
+        final Future err = monitor(process.getErrorStream(), stdErr);
         int exitCode = process.waitFor();
-        output.cancel(true);
+        out.cancel(true);
+        err.cancel(true);
         if (exitCode != 0) {
             final StringBuilder message = new StringBuilder();
             message.append(description).append(" failed with exit code ").append(exitCode);
@@ -89,23 +121,13 @@ public class ProcessMonitor {
                 message.append(EOL);
                 capturedOutput.forEach(line -> message.append("    ").append(line).append(EOL));
             }
-            throw new Error(message.toString());
+            throw new IOException(message.toString());
         }
     }
 
-    private static class StreamConsumer implements Runnable {
-        private final InputStream inputStream;
-        private final Consumer<String> output;
-
-        StreamConsumer(InputStream inputStream, Consumer<String> output) {
-            this.inputStream = inputStream;
-            this.output = output;
-        }
-
-        @Override
-        public void run() {
-            new BufferedReader(new InputStreamReader(inputStream)).lines()
-                                                                  .forEach(output);
-        }
+    private static Future monitor(InputStream input, Consumer<String> output) {
+        return EXECUTOR.submit(() -> {
+            new BufferedReader(new InputStreamReader(input)).lines().forEach(output);
+        });
     }
 }

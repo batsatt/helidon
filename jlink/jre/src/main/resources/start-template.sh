@@ -7,9 +7,9 @@ usage() {
     echo "Usage: ${scriptName} <options> [serverArg]..."
     echo
     echo "Options:"
-    echo "     -j | --jvm <option>     Add a JVM option."
+    echo "     -j | --jvm <option>     Add a JVM option. Can be used multiple times, and/or quoted strings provided."
     echo "     -d | --debug            Add JVM debug options. Uses JAVA_DEBUG env var if present, or a default if not."
-    echo "     -c | --cds              Use the CDS archive."
+    echo "     -c | --cds              Use the CDS archive if present."
     echo
     exit 0
 }
@@ -20,7 +20,7 @@ main() {
 }
 
 start() {
-    ${javaCommand} ${jvmOptions} -jar ${mainJar} ${serverOptions}
+    ${javaCommand} ${jvmOptions} -jar ${mainJar} ${serverArgs}
 }
 
 init() {
@@ -29,25 +29,28 @@ init() {
     readonly binDir=$(dirname "${0}")
     readonly homeDir=$(cd "${binDir}"/..; pwd)
     readonly javaCommand="${binDir}/java"
+    readonly cdsArchive="${homeDir}/lib/start.jsa"
     readonly mainJar="${homeDir}/app/${mainJarName}"
     jvmOptions=
-    serverOptions=
+    serverArgs=
 
     while (( ${#} > 0 )); do
         case "${1}" in
             -h | --help) usage ;;
             -c | --cds) setCds ;;
             -j | --jvm) shift; appendVar jvmOptions "${1}" ;;
-            *) appendVar serverOptions "${1}" ;;
+            *) appendVar serverArgs "${1}" ;;
         esac
         shift
     done
 }
 
 setCds() {
-    readonly cdsArchive="${homeDir}/lib/server.jsa"
-    [[ -e ${cdsArchive} ]] || fail "${cdsArchive} not found"
-    appendVar jvmOptions "-XX:SharedArchiveFile=${cdsArchive}"
+    if [[ -e ${cdsArchive} ]]; then
+        appendVar jvmOptions "-XX:SharedArchiveFile=${cdsArchive}"
+    else
+        echo "WARNING: CDS archive not found"
+    fi
 }
 
 setDebug() {

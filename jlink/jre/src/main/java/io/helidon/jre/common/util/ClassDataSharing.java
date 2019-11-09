@@ -119,7 +119,8 @@ public class ClassDataSharing {
 
     public static class Builder {
         private static final Log LOG = Log.getLog("class-data-sharing");
-        private static final String FILE_PREFIX = "server";
+        private static final String FILE_PREFIX = "start";
+        private static final String ARCHIVE_NAME = FILE_PREFIX + ".jsa";
         private static final String CLASS_LIST_FILE_SUFFIX = ".classlist";
         private static final String JAR_SUFFIX = ".jar";
         private static final String XSHARE_OFF = "-Xshare:off";
@@ -129,7 +130,6 @@ public class ClassDataSharing {
         private static final String XX_SHARED_CLASS_LIST_FILE = "-XX:SharedClassListFile=";
         private static final String EXIT_ON_STARTED = "-Dexit.on.started";
         private static final String LIB_DIR_NAME = "lib";
-        private static final String ARCHIVE_NAME = FILE_PREFIX + ".jsa";
         private static final String CLASS_SUFFIX = ".class";
         private static final String MODULE_INFO_NAME = "module-info";
         private static final String BEAN_ARCHIVE_SCANNER = "org/jboss/weld/environment/deployment/discovery/BeanArchiveScanner";
@@ -340,7 +340,7 @@ public class ClassDataSharing {
 
             builder.directory(jre.toFile());
 
-            ProcessMonitor.newMonitor(builder, action, outputLog).run();
+            ProcessMonitor.newMonitor(action, builder, outputLog).run();
         }
 
         private Path javaPath() {

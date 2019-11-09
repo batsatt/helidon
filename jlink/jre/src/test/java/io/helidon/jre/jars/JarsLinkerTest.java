@@ -103,13 +103,13 @@ class JarsLinkerTest {
 
     private static void assertScript(Path jre) throws IOException {
         Path binDir = FileUtils.assertDir(jre.resolve("bin"));
-        Path scriptFile = FileUtils.assertFile(binDir.resolve("server"));
+        Path scriptFile = FileUtils.assertFile(binDir.resolve("start"));
         assertExecutable(scriptFile);
     }
 
     private static void assertCdsArchive(Path jre, boolean archiveExists) {
         Path libDir = FileUtils.assertDir(jre.resolve("lib"));
-        Path archiveFile = libDir.resolve("server.jsa");
+        Path archiveFile = libDir.resolve("start.jsa");
         assertThat(Files.exists(archiveFile), is(archiveExists));
     }
 
